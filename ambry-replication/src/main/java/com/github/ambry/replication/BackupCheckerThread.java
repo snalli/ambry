@@ -32,9 +32,7 @@ import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.Time;
-import com.github.ambry.utils.Utils;
 import java.io.File;
-import java.nio.file.StandardOpenOption;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
@@ -54,16 +52,12 @@ import org.slf4j.LoggerFactory;
  * 2> The backup may be ahead of the replica. This can happen if the replica is lagging behind its peers. If we recover
  * from such a backup, we'd still be consistent from the user's point of view. The lagging replica must catch up with
  * its peers and this checker will detect such lagging replicas as well.
- * TODO: Redirect to a different file
- * TODO: Testing on sample partitions
  */
 public class BackupCheckerThread extends ReplicaThread {
 
   private final Logger logger = LoggerFactory.getLogger(BackupCheckerThread.class);
-  protected final BackupCheckerFileManager fileManager;
   public static final String DR_Verifier_Keyword = "dr";
   public static final String MISSING_KEYS_FILE = "missingKeys";
-  public static final String REPLICA_STATUS_FILE = "replicaCheckStatus";
 
   public BackupCheckerThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, ConnectionPool connectionPool, NetworkClient networkClient,
@@ -76,12 +70,6 @@ public class BackupCheckerThread extends ReplicaThread {
         replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry,
         replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate,
         leaderBasedReplicationAdmin);
-    try {
-      fileManager = Utils.getObj(replicationConfig.backupCheckFileManagerType, replicationConfig, metricRegistry);
-    } catch (ReflectiveOperationException e) {
-      logger.error("Failed to create file manager. ", e.toString());
-      throw new RuntimeException(e);
-    }
     logger.info("Created BackupCheckerThread {}", threadName);
   }
 
@@ -244,34 +232,6 @@ public class BackupCheckerThread extends ReplicaThread {
       messageInfoTypes.add(MessageInfoType.UNDELETE);
     }
     return messageInfoTypes;
-  }
-
-  /**
-   * Prints a log if local store has caught up with remote store
-   * @param remoteReplicaInfo Info about remote replica
-   * @param exchangeMetadataResponse Metadata response object
-   */
-  @Override
-  protected void logReplicationStatus(RemoteReplicaInfo remoteReplicaInfo,
-      ExchangeMetadataResponse exchangeMetadataResponse) {
-    // This will help us know when to stop DR process for sealed partitions
-    String text = String.format("%s | isSealed = %s | Token = %s | localLagFromRemoteInBytes = %s \n",
-        remoteReplicaInfo, remoteReplicaInfo.getReplicaId().isSealed(), remoteReplicaInfo.getToken().toString(),
-        exchangeMetadataResponse.localLagFromRemoteInBytes);
-    fileManager.truncateAndWriteToFile(getFilePath(remoteReplicaInfo, REPLICA_STATUS_FILE), text);
-  }
-
-  /**
-   * Returns a concatenated file path
-   * @param remoteReplicaInfo Info about remote replica
-   * @param fileName Name of file to write text to
-   * @return Returns a concatenated file path
-   */
-  protected String getFilePath(RemoteReplicaInfo remoteReplicaInfo, String fileName) {
-    return String.join(File.separator,
-        Long.toString(remoteReplicaInfo.getReplicaId().getPartitionId().getId()),
-        remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname(),
-        fileName);
   }
 
   /**
