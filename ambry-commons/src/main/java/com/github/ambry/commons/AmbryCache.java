@@ -177,8 +177,7 @@ public class AmbryCache {
   private void initializeAmbryCacheStats() {
 
     HashMap<String, Gauge> metricMap = new HashMap<>();
-    metricMap.put(MetricRegistry.name(AmbryCache.class, cacheId + "Enabled"), (Gauge<Integer>) () ->
-        cacheEnabled ? 1 : 0);
+    metricMap.put(MetricRegistry.name(AmbryCache.class, cacheId + "Enabled"), (Gauge<Integer>) () -> cacheEnabled ? 1 : 0);
     metricMap.put(MetricRegistry.name(AmbryCache.class, cacheId + "MaxNumCacheEntries"), (Gauge<Long>) () -> maxNumCacheEntries);
     metricMap.put(MetricRegistry.name(AmbryCache.class, cacheId + "HitRate"), (Gauge<Double>) () -> ambryCache.stats().hitRate());
     metricMap.put(MetricRegistry.name(AmbryCache.class, cacheId + "MissRate"), (Gauge<Double>) () -> ambryCache.stats().missRate());
@@ -189,7 +188,13 @@ public class AmbryCache {
     metricMap.put(MetricRegistry.name(AmbryCache.class, cacheId + "RequestCount"), (Gauge<Long>) () -> ambryCache.stats().requestCount());
     for (Map.Entry<String, Gauge> entry : metricMap.entrySet()) {
       if (metricRegistry.getMetrics().containsKey(entry.getKey()) == false) {
-        metricRegistry.register(entry.getKey(), entry.getValue());
+        try {
+          metricRegistry.register(entry.getKey(), entry.getValue());
+        } catch (IllegalArgumentException e) {
+          // This means someone else registered the metric with the same name before we could.
+          // No problem. We'll just use that metric.
+          logger.trace(e.toString());
+        }
       }
     }
 
