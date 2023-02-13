@@ -33,6 +33,8 @@ import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.Time;
 import java.io.File;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
@@ -58,6 +60,7 @@ public class BackupCheckerThread extends ReplicaThread {
   private final Logger logger = LoggerFactory.getLogger(BackupCheckerThread.class);
   public static final String DR_Verifier_Keyword = "dr";
   public static final String MISSING_KEYS_FILE = "missingKeys";
+  public static final DateFormat DATE_FORMAT = new SimpleDateFormat("dd MMM yyyy HH:mm:ss:SSS");
 
   public BackupCheckerThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
       AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, ConnectionPool connectionPool, NetworkClient networkClient,
@@ -186,7 +189,7 @@ public class BackupCheckerThread extends ReplicaThread {
    */
   protected void checkLocalStore(MessageInfo remoteBlob, RemoteReplicaInfo remoteReplicaInfo,
       EnumSet<MessageInfoType> acceptableLocalBlobStates, EnumSet<StoreErrorCodes> acceptableStoreErrorCodes) {
-    String errMsg = "%s | Missing %s | %s | RemoteBlobState = %s | LocalBlobState = %s \n";
+    String errMsg = "%s | Missing %s | %s | Optime = %s | RemoteBlobState = %s | LocalBlobState = %s \n";
     try {
       EnumSet<MessageInfoType> messageInfoTypes = EnumSet.copyOf(acceptableLocalBlobStates);
       // findKey() is better than get() since findKey() returns index records even if blob is marked for deletion.
@@ -197,6 +200,7 @@ public class BackupCheckerThread extends ReplicaThread {
       if (messageInfoTypes.isEmpty()) {
         fileManager.appendToFile(getFilePath(remoteReplicaInfo, MISSING_KEYS_FILE),
             String.format(errMsg, remoteReplicaInfo, acceptableLocalBlobStates, remoteBlob.getStoreKey(),
+                DATE_FORMAT.format(remoteBlob.getOperationTimeMs()),
                 getBlobStates(remoteBlob), getBlobStates(localBlob)));
       }
     } catch (StoreException e) {
@@ -206,6 +210,7 @@ public class BackupCheckerThread extends ReplicaThread {
       if (storeErrorCodes.isEmpty()) {
         fileManager.appendToFile(getFilePath(remoteReplicaInfo, MISSING_KEYS_FILE),
             String.format(errMsg, remoteReplicaInfo, acceptableLocalBlobStates, remoteBlob.getStoreKey(),
+                DATE_FORMAT.format(remoteBlob.getOperationTimeMs()),
                 getBlobStates(remoteBlob), e.getErrorCode()));
       }
     }

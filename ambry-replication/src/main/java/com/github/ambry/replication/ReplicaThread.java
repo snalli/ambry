@@ -294,7 +294,7 @@ public class ReplicaThread implements Runnable {
     switch (remoteReplicaInfo.getReplicaId().getReplicaType()) {
       case CLOUD_BACKED:
         // This will help us know when to stop recovery process
-        String text = String.format("snkt | %s | Token = %s | localLagFromVCRInBytes = %s \n\n\n\n\n\n\n\n\n\n\n\n\n\n",
+        String text = String.format("snkt | %s | Token = %s | localLagFromVCRInBytes = %s \n\n",
             remoteReplicaInfo, remoteReplicaInfo.getToken().toString(),
             exchangeMetadataResponse.localLagFromRemoteInBytes);
         logger.trace(text);
@@ -302,7 +302,7 @@ public class ReplicaThread implements Runnable {
         break;
       case DISK_BACKED:
         // This will help us know when to stop backup-checker process
-        text = String.format("snkt | %s | isSealed = %s | Token = %s | localLagFromRemoteInBytes = %s \n\n\n\n\n\n\n\n",
+        text = String.format("snkt | %s | isSealed = %s | Token = %s | localLagFromRemoteInBytes = %s \n\n",
             remoteReplicaInfo, remoteReplicaInfo.getReplicaId().isSealed(), remoteReplicaInfo.getToken().toString(),
             exchangeMetadataResponse.localLagFromRemoteInBytes);
         logger.trace(text);

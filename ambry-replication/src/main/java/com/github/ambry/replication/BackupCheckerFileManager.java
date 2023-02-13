@@ -73,7 +73,7 @@ public class BackupCheckerFileManager {
    * @return File descriptor
    */
   protected SeekableByteChannel getFd(String filePath, EnumSet<StandardOpenOption> options) {
-    // Create all files in a configured directory
+
     FileDescriptor fileDescriptor = (FileDescriptor) fileDescriptorCache.getObject(filePath);
     if (fileDescriptor == null) {
       // Create parent folders
@@ -107,12 +107,9 @@ public class BackupCheckerFileManager {
    * @param text Text to append
    * @return True if write was successful, false otherwise
    */
-  protected boolean writeToFile(String filePath, EnumSet<StandardOpenOption> options, String text, int offset) {
-    SeekableByteChannel seekableByteChannel = getFd(filePath, options);
+  protected boolean writeToFile(SeekableByteChannel seekableByteChannel, String text) {
+
     try {
-      if (offset >= 0) {
-        seekableByteChannel.position(offset);
-      }
       seekableByteChannel.write(ByteBuffer.wrap(
           String.join(COLUMN_SEPARATOR, DATE_FORMAT.format(System.currentTimeMillis()), text).getBytes(StandardCharsets.UTF_8)));
       return true;
@@ -134,7 +131,8 @@ public class BackupCheckerFileManager {
     if (Files.exists(Paths.get(filePath)) == false) {
       options.add(StandardOpenOption.CREATE);
     }
-    return writeToFile(filePath, options, text, -1);
+    SeekableByteChannel seekableByteChannel = getFd(filePath, options);
+    return writeToFile(seekableByteChannel, text);
   }
 
   /**
@@ -146,11 +144,15 @@ public class BackupCheckerFileManager {
    */
   protected boolean truncateAndWriteToFile(String filePath, String text) {
     EnumSet<StandardOpenOption> options = EnumSet.of(StandardOpenOption.WRITE);
-    if (Files.exists(Paths.get(filePath))) {
-      options.add(StandardOpenOption.TRUNCATE_EXISTING);
-    } else {
+    if (Files.exists(Paths.get(filePath)) == false) {
       options.add(StandardOpenOption.CREATE);
     }
-    return writeToFile(filePath, options, text, 0);
+    SeekableByteChannel seekableByteChannel = getFd(filePath, options);
+    try {
+      seekableByteChannel.truncate(0);
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+    return writeToFile(seekableByteChannel, text);
   }
 }
