@@ -61,17 +61,19 @@ public class BackupCheckerFileManager {
     this.replicationConfig = replicationConfig;
     this.fileDescriptorCache = new AmbryCache("ReplicaThreadFileDescCache", true,
         replicationConfig.maxBackupCheckerReportFd, metricRegistry);
+    logger.info("snkt | File manager directory : {}", replicationConfig.backupCheckerReportDir);
+    logger.info("snkt | Curr directory : {}", replicationConfig.backupCheckerReportDir);
+
   }
 
   /**
    * Returns a cached file-desc or creates a new one
-   * @param path File system path
+   * @param filePath File system path
    * @param options Options to use when opening or creating a file
    * @return File descriptor
    */
-  protected SeekableByteChannel getFd(String path, EnumSet<StandardOpenOption> options) {
+  protected SeekableByteChannel getFd(String filePath, EnumSet<StandardOpenOption> options) {
     // Create all files in a configured directory
-    String filePath = String.join(File.separator, replicationConfig.backupCheckerReportDir, path);
     FileDescriptor fileDescriptor = (FileDescriptor) fileDescriptorCache.getObject(filePath);
     if (fileDescriptor == null) {
       // Create parent folders
@@ -84,11 +86,11 @@ public class BackupCheckerFileManager {
       }
 
       // Create file
-      Path _path = Paths.get(filePath);
+      Path path = Paths.get(filePath);
       try {
-        fileDescriptor = new FileDescriptor(Files.newByteChannel(_path, options));
+        fileDescriptor = new FileDescriptor(Files.newByteChannel(path, options));
       } catch (IOException e) {
-        logger.error("Path = {}, Options = {}, Error creating file = {}", _path, options, e.toString());
+        logger.error("Path = {}, Options = {}, Error creating file = {}", path, options, e.toString());
         return null;
       }
 
@@ -105,9 +107,12 @@ public class BackupCheckerFileManager {
    * @param text Text to append
    * @return True if write was successful, false otherwise
    */
-  protected boolean writeToFile(String filePath, EnumSet<StandardOpenOption> options, String text) {
+  protected boolean writeToFile(String filePath, EnumSet<StandardOpenOption> options, String text, int offset) {
     SeekableByteChannel seekableByteChannel = getFd(filePath, options);
     try {
+      if (offset >= 0) {
+        seekableByteChannel.position(offset);
+      }
       seekableByteChannel.write(ByteBuffer.wrap(
           String.join(COLUMN_SEPARATOR, DATE_FORMAT.format(System.currentTimeMillis()), text).getBytes(StandardCharsets.UTF_8)));
       return true;
@@ -129,7 +134,7 @@ public class BackupCheckerFileManager {
     if (Files.exists(Paths.get(filePath)) == false) {
       options.add(StandardOpenOption.CREATE);
     }
-    return writeToFile(filePath, options, text);
+    return writeToFile(filePath, options, text, -1);
   }
 
   /**
@@ -146,6 +151,6 @@ public class BackupCheckerFileManager {
     } else {
       options.add(StandardOpenOption.CREATE);
     }
-    return writeToFile(filePath, options, text);
+    return writeToFile(filePath, options, text, 0);
   }
 }
