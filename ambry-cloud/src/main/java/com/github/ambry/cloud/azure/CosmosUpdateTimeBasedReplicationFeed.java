@@ -63,24 +63,24 @@ public class CosmosUpdateTimeBasedReplicationFeed implements AzureReplicationFee
   public FindResult getNextEntriesAndUpdatedToken(FindToken curfindToken, long maxTotalSizeOfEntries,
       String partitionPath) throws CosmosException {
     Timer.Context operationTimer = azureMetrics.replicationFeedQueryTime.time();
+    List<CloudBlobMetadata> queryResults = new ArrayList<>();
+    CosmosUpdateTimeFindToken findToken = (CosmosUpdateTimeFindToken) curfindToken;
     try {
-      CosmosUpdateTimeFindToken findToken = (CosmosUpdateTimeFindToken) curfindToken;
-
-      SqlQuerySpec sqlQuerySpec =
-          new SqlQuerySpec(ENTRIES_SINCE_QUERY_TEMPLATE, new SqlParameter(LIMIT_PARAM, queryBatchSize),
-              new SqlParameter(TIME_SINCE_PARAM, findToken.getLastUpdateTime()));
-
-      List<CloudBlobMetadata> queryResults =
-          cosmosDataAccessor.queryMetadataAsync(partitionPath, sqlQuerySpec, azureMetrics.findSinceQueryTime).join();
-      if (queryResults.isEmpty()) {
-        return new FindResult(new ArrayList<>(), findToken);
+      for (int numResults = queryBatchSize; numResults >= 1; numResults /= 2) {
+        try {
+          // log
+          SqlQuerySpec sqlQuerySpec =
+              new SqlQuerySpec(ENTRIES_SINCE_QUERY_TEMPLATE, new SqlParameter(LIMIT_PARAM, numResults),
+                  new SqlParameter(TIME_SINCE_PARAM, findToken.getLastUpdateTime()));
+          queryResults =
+              cosmosDataAccessor.queryMetadataAsync(partitionPath, sqlQuerySpec, azureMetrics.findSinceQueryTime).join();
+        } catch (Exception ex) {
+          if (numResults < 1) {
+            // log
+            throw ex;
+          }
+        }
       }
-      if (queryResults.get(0).getLastUpdateTime() == findToken.getLastUpdateTime()) {
-        filterOutLastReadBlobs(queryResults, findToken.getLastUpdateTimeReadBlobIds(), findToken.getLastUpdateTime());
-      }
-      List<CloudBlobMetadata> cappedResults =
-          CloudBlobMetadata.capMetadataListBySize(queryResults, maxTotalSizeOfEntries);
-      return new FindResult(cappedResults, CosmosUpdateTimeFindToken.getUpdatedToken(findToken, cappedResults));
     } catch (Exception ex) {
       ex = Utils.extractFutureExceptionCause(ex);
       if (ex instanceof CosmosException) {
@@ -91,6 +91,11 @@ public class CosmosUpdateTimeBasedReplicationFeed implements AzureReplicationFee
     } finally {
       operationTimer.stop();
     }
+    // This is problematic. Infinite loops. Too much filtering.
+    if (queryResults.get(0).getLastUpdateTime() == findToken.getLastUpdateTime()) {
+      filterOutLastReadBlobs(queryResults, findToken.getLastUpdateTimeReadBlobIds(), findToken.getLastUpdateTime());
+    }
+    return new FindResult(queryResults, CosmosUpdateTimeFindToken.getUpdatedToken(findToken, queryResults));
   }
 
   @Override
