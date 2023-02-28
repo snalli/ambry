@@ -172,6 +172,6 @@ public class CloudDataNode implements DataNodeId {
 
   @Override
   public String toString() {
-    return "CloudDataNode[" + getHostname() + ":" + getPort() + "]";
+    return "CloudDataNode[" + getHostname() + ":" + getSSLPort() + ":" + getHttp2Port() + ":" + plainTextPort.getPort() + "]";
   }
 }
