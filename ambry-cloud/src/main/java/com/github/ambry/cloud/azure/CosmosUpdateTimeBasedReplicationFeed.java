@@ -13,18 +13,29 @@
  */
 package com.github.ambry.cloud.azure;
 
+import com.azure.cosmos.ConsistencyLevel;
+import com.azure.cosmos.CosmosContainer;
 import com.azure.cosmos.CosmosException;
+import com.azure.cosmos.models.CosmosQueryRequestOptions;
+import com.azure.cosmos.models.FeedResponse;
+import com.azure.cosmos.models.PartitionKey;
 import com.azure.cosmos.models.SqlParameter;
 import com.azure.cosmos.models.SqlQuerySpec;
+import com.azure.cosmos.util.CosmosPagedIterable;
 import com.codahale.metrics.Timer;
 import com.github.ambry.cloud.CloudBlobMetadata;
 import com.github.ambry.cloud.FindResult;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.utils.Utils;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -46,6 +57,8 @@ public class CosmosUpdateTimeBasedReplicationFeed implements AzureReplicationFee
   private final AzureMetrics azureMetrics;
   private final int queryBatchSize;
 
+  private static final Logger logger = LoggerFactory.getLogger(CosmosUpdateTimeBasedReplicationFeed.class);
+
   /**
    * Constructor for {@link CosmosUpdateTimeBasedReplicationFeed} object.
    * @param cosmosDataAccessor {@link CosmosDataAccessor} object to run Cosmos change feed queries.
@@ -64,6 +77,46 @@ public class CosmosUpdateTimeBasedReplicationFeed implements AzureReplicationFee
       String partitionPath) throws CosmosException {
     Timer.Context operationTimer = azureMetrics.replicationFeedQueryTime.time();
     try {
+      DateFormat DATE_FORMAT = new SimpleDateFormat("dd MMM yyyy HH:mm:ss:SSS");
+      String currContinuationToken = ((CosmosUpdateTimeFindToken) curfindToken).getContinuationToken();
+      String nextContinuationToken = null;
+      String COSMOS_QUERY = "select * from c where c._ts > 0 and c.partitionId = %s order by c._ts asc";
+      String cosmosQuery  = String.format(COSMOS_QUERY, partitionPath);
+      CosmosContainer cosmosContainer = cosmosDataAccessor.getCosmosContainer();
+      CosmosQueryRequestOptions cosmosQueryRequestOptions = new CosmosQueryRequestOptions();
+      cosmosQueryRequestOptions.setPartitionKey(new PartitionKey(partitionPath));
+      cosmosQueryRequestOptions.setResponseContinuationTokenLimitInKb(64);
+      cosmosQueryRequestOptions.setConsistencyLevel(ConsistencyLevel.CONSISTENT_PREFIX);
+      String queryName = "snkt-" + System.currentTimeMillis();
+      cosmosQueryRequestOptions.setQueryName(queryName);
+      logger.info("| snkt | queryName = {} | Sending cosmos query {} with requestOptions {}", queryName, cosmosQuery, cosmosQueryRequestOptions);
+      Iterable<FeedResponse<CloudBlobMetadata>> cloudBlobMetadataIter = cosmosContainer.queryItems(cosmosQuery,
+          cosmosQueryRequestOptions, CloudBlobMetadata.class).iterableByPage(currContinuationToken);
+      List<CloudBlobMetadata> cosmosQueryResults = new ArrayList<>();
+      long lastUpdateTime = -1;
+      int numPages = 0, numResults = 0;
+      double requestCharge = 0;
+      for (FeedResponse<CloudBlobMetadata> page : cloudBlobMetadataIter) {
+        nextContinuationToken = page.getContinuationToken();
+        requestCharge += page.getRequestCharge();
+        for (CloudBlobMetadata cloudBlobMetadata : page.getResults()) {
+          cosmosQueryResults.add(cloudBlobMetadata);
+          lastUpdateTime = Math.max(lastUpdateTime, cloudBlobMetadata.getLastUpdateTime());
+          ++numResults;
+        }
+        ++numPages;
+      }
+      logger.info("| snkt | queryName = {} | Received cosmos query results | numPages = {} | numResults = {} | requestCharge = {} | lastUpdateTime = {} | lastUpdateDateTime = {} | oldToken = {} | newToken = {}",
+          queryName, numPages, numResults, requestCharge, lastUpdateTime, DATE_FORMAT.format(lastUpdateTime), currContinuationToken, nextContinuationToken);
+      CosmosUpdateTimeFindToken newToken = new CosmosUpdateTimeFindToken(lastUpdateTime, 0, new HashSet<String>());
+      if (nextContinuationToken != null) {
+        newToken.setContinuationToken(nextContinuationToken);
+      } else {
+        newToken.setContinuationToken(currContinuationToken);
+      }
+      return new FindResult(cosmosQueryResults, newToken);
+
+      /*
       CosmosUpdateTimeFindToken findToken = (CosmosUpdateTimeFindToken) curfindToken;
 
       SqlQuerySpec sqlQuerySpec =
@@ -81,6 +134,7 @@ public class CosmosUpdateTimeBasedReplicationFeed implements AzureReplicationFee
       List<CloudBlobMetadata> cappedResults =
           CloudBlobMetadata.capMetadataListBySize(queryResults, maxTotalSizeOfEntries);
       return new FindResult(cappedResults, CosmosUpdateTimeFindToken.getUpdatedToken(findToken, cappedResults));
+       */
     } catch (Exception ex) {
       ex = Utils.extractFutureExceptionCause(ex);
       if (ex instanceof CosmosException) {

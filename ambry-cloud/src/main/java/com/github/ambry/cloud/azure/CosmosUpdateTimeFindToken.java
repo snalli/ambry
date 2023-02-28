@@ -40,6 +40,8 @@ public class CosmosUpdateTimeFindToken implements FindToken {
   private final Set<String> lastUpdateTimeReadBlobIds;
   private final long bytesRead;
 
+  private String continuationToken;
+
   public static final DateFormat DATE_FORMAT = new SimpleDateFormat("dd MMM yyyy HH:mm:ss:SSS");
 
   /** Constructor for start token */
@@ -66,6 +68,13 @@ public class CosmosUpdateTimeFindToken implements FindToken {
     this.lastUpdateTimeReadBlobIds = new HashSet<>(lastUpdateTimeReadBlobIds);
   }
 
+  public String getContinuationToken() {
+    return continuationToken;
+  }
+
+  public void setContinuationToken(String continuationToken) {
+    this.continuationToken = continuationToken;
+  }
   /**
    * Utility to construct a new CloudFindToken from a previous instance and the results of a findEntriesSince query.
    * @param prevToken previous {@link CosmosUpdateTimeFindToken}.

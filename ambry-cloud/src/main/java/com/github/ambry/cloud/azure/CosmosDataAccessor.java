@@ -14,11 +14,15 @@
 package com.github.ambry.cloud.azure;
 
 import com.azure.core.http.ProxyOptions;
+import com.azure.cosmos.ConsistencyLevel;
 import com.azure.cosmos.CosmosAsyncClient;
 import com.azure.cosmos.CosmosAsyncContainer;
 import com.azure.cosmos.CosmosAsyncDatabase;
 import com.azure.cosmos.CosmosAsyncStoredProcedure;
+import com.azure.cosmos.CosmosClient;
 import com.azure.cosmos.CosmosClientBuilder;
+import com.azure.cosmos.CosmosContainer;
+import com.azure.cosmos.CosmosDatabase;
 import com.azure.cosmos.CosmosException;
 import com.azure.cosmos.DirectConnectionConfig;
 import com.azure.cosmos.GatewayConnectionConfig;
@@ -94,6 +98,9 @@ public class CosmosDataAccessor {
   static final int STATUS_NOT_FOUND = 404;
 
   private final CosmosAsyncClient cosmosAsyncClient;
+  private CosmosClient cosmosClient;
+  private CosmosDatabase realCosmosDatabase;
+  private CosmosContainer cosmosContainer;
   private CosmosAsyncDatabase cosmosAsyncDatabase;
   private CosmosAsyncContainer cosmosAsyncContainer;
   private final CloudRequestAgent requestAgent;
@@ -139,6 +146,19 @@ public class CosmosDataAccessor {
     }
     cosmosAsyncClient = cosmosClientBuilder.buildAsyncClient();
 
+    ThrottlingRetryOptions syncClientThrottlingRetryOptions = new ThrottlingRetryOptions();
+    syncClientThrottlingRetryOptions.setMaxRetryAttemptsOnThrottledRequests(3);
+    CosmosClientBuilder cosmosSyncClientBuilder = new CosmosClientBuilder().endpoint(azureCloudConfig.cosmosEndpoint)
+        .key(getCosmosKey(azureCloudConfig))
+        .throttlingRetryOptions(syncClientThrottlingRetryOptions);
+    if (azureCloudConfig.cosmosDirectHttps) {
+      logger.info("Using CosmosDB DirectHttps connection mode");
+      cosmosSyncClientBuilder.directMode(new DirectConnectionConfig(), gatewayConnectionConfig);
+    } else {
+      cosmosSyncClientBuilder.gatewayMode(gatewayConnectionConfig);
+    }
+    cosmosClient = cosmosSyncClientBuilder.buildClient();
+
     requestAgent = new CloudRequestAgent(cloudConfig, vcrMetrics);
 
     this.continuationTokenLimitKb = azureCloudConfig.cosmosContinuationTokenLimitKb;
@@ -174,6 +194,9 @@ public class CosmosDataAccessor {
     this.updateCallback = callback;
   }
 
+  public CosmosContainer getCosmosContainer() {
+    return cosmosContainer;
+  }
   /**
    * Test connectivity to Azure CosmosDB
    */
@@ -191,6 +214,23 @@ public class CosmosDataAccessor {
       if (cosmosContainerResponse == null || cosmosContainerResponse.getStatusCode() == STATUS_NOT_FOUND) {
         throw new IllegalStateException("CosmosDB container not found: " + cosmosCollection);
       }
+
+      realCosmosDatabase = cosmosClient.getDatabase(cosmosDatabase);
+      cosmosDatabaseResponse = realCosmosDatabase.read();
+      if (cosmosDatabaseResponse == null || cosmosDatabaseResponse.getStatusCode() == STATUS_NOT_FOUND) {
+        throw new IllegalStateException("| snkt | CosmosClient | CosmosDB Database not found: " + cosmosDatabase);
+      } else {
+        logger.info("| snkt | Created cosmosSyncDatabse object.");
+      }
+
+      cosmosContainer = realCosmosDatabase.getContainer(cosmosCollection);
+      cosmosContainerResponse = cosmosContainer.read();
+      if (cosmosContainerResponse == null || cosmosContainerResponse.getStatusCode() == STATUS_NOT_FOUND) {
+        throw new IllegalStateException("| snkt | CosmosClient | CosmosDB container not found: " + cosmosCollection);
+      } else {
+        logger.info("| snkt | Created cosmosSyncContainer object.");
+      }
+
     } catch (Exception ex) {
       if (ex instanceof CosmosException && ((CosmosException) ex).getStatusCode() == STATUS_NOT_FOUND) {
         //Client-specific errors
