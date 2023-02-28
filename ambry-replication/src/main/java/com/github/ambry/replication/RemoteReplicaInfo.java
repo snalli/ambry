@@ -92,11 +92,11 @@ public class RemoteReplicaInfo {
     return replicaId;
   }
 
-  ReplicaId getLocalReplicaId() {
+  public ReplicaId getLocalReplicaId() {
     return localReplicaId;
   }
 
-  Store getLocalStore() {
+  public Store getLocalStore() {
     return localStore;
   }
 
@@ -142,7 +142,7 @@ public class RemoteReplicaInfo {
     return localLagFromRemoteStore;
   }
 
-  synchronized FindToken getToken() {
+  public synchronized FindToken getToken() {
     return currentToken;
   }
 
@@ -158,7 +158,7 @@ public class RemoteReplicaInfo {
     this.totalBytesReadFromLocalStore = totalBytesReadFromLocalStore;
   }
 
-  void setLocalLagFromRemoteInBytes(long localLagFromRemoteStore) {
+  public void setLocalLagFromRemoteInBytes(long localLagFromRemoteStore) {
     this.localLagFromRemoteStore = localLagFromRemoteStore;
   }
 
@@ -166,7 +166,7 @@ public class RemoteReplicaInfo {
     return this.totalBytesReadFromLocalStore;
   }
 
-  synchronized void setToken(FindToken token) {
+  public synchronized void setToken(FindToken token) {
     // reference assignment is atomic in java but we want to be completely safe. performance is
     // not important here
     currentToken = token;
@@ -234,7 +234,7 @@ public class RemoteReplicaInfo {
    * Set the metadata response received for this replica in the most recent replication cycle.
    * @param exchangeMetadataResponse contains metadata response (missing keys, token info, local lag from remote, etc.).
    */
-  synchronized void setExchangeMetadataResponse(ReplicaThread.ExchangeMetadataResponse exchangeMetadataResponse) {
+  public synchronized void setExchangeMetadataResponse(ReplicaThread.ExchangeMetadataResponse exchangeMetadataResponse) {
     // Synchronized to avoid conflict between replica threads setting new exchangeMetadataResponse received for this replica
     // and replica threads going through existing metadata response (via updateMissingMessagesInMetadataResponse()) to
     // to compare newly written messages to store with missing message set in metadata response.

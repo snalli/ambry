@@ -43,7 +43,7 @@ public class BackupCheckerFileManager {
    * @param text Text to append
    * @return True if append was successful, false otherwise
    */
-  protected boolean truncateAndWriteToFile(String filePath, String text) {
+  public boolean truncateAndWriteToFile(String filePath, String text) {
     // open-source impl
     return true;
   }

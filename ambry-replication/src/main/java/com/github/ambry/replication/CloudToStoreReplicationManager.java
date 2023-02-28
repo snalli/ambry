@@ -18,25 +18,34 @@ import com.github.ambry.clustermap.CloudDataNode;
 import com.github.ambry.clustermap.CloudReplica;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
-import com.github.ambry.clustermap.VcrClusterSpectator;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.PartitionStateChangeListener;
 import com.github.ambry.clustermap.ReplicaId;
+import com.github.ambry.clustermap.ReplicaSyncUpManager;
 import com.github.ambry.clustermap.StateModelListenerType;
+import com.github.ambry.clustermap.StaticVcrClustermap;
+import com.github.ambry.clustermap.VcrClusterSpectator;
+import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.network.ConnectionPool;
+import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.server.StoreManager;
+import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.Store;
+import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.StoreKeyConverterFactory;
 import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -48,16 +57,20 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import org.apache.helix.NotificationContext;
 import org.apache.helix.api.listeners.InstanceConfigChangeListener;
 import org.apache.helix.api.listeners.LiveInstanceChangeListener;
 import org.apache.helix.model.InstanceConfig;
 import org.apache.helix.model.LiveInstance;
+import org.json.JSONObject;
 
 import static com.github.ambry.clustermap.ClusterMapUtils.*;
 import static com.github.ambry.config.CloudConfig.*;
+import static com.github.ambry.utils.Utils.*;
 
 
 /**
@@ -116,9 +129,35 @@ public class CloudToStoreReplicationManager extends ReplicationEngine {
 
   @Override
   public void start() {
-    // Add listener for vcr instance config changes
-    vcrClusterSpectator.registerInstanceConfigChangeListener(new InstanceConfigChangeListenerImpl());
-    vcrClusterSpectator.registerLiveInstanceChangeListener(new LiveInstanceChangeListenerImpl());
+    if (vcrClusterSpectator != null) {
+      // Add listener for vcr instance config changes
+      vcrClusterSpectator.registerInstanceConfigChangeListener(new InstanceConfigChangeListenerImpl());
+      vcrClusterSpectator.registerLiveInstanceChangeListener(new LiveInstanceChangeListenerImpl());
+    } else {
+      // vcrClusterSpectator is null when vcrClusterAgentsFactory is set to StaticVcrClusterAgentsFactory
+      // Static VCR cluster-map
+      String staticVcrClustermapFile = "/export/content/lid/data/ambry-clustermap/ambry-clustermap/StaticVcrClustermap.json";
+      StaticVcrClustermap staticVcrClustermap = null;
+      try {
+        staticVcrClustermap = new StaticVcrClustermap(
+            new JSONObject(readStringFromFile(staticVcrClustermapFile)), clusterMapConfig);
+      } catch (IOException e) {
+        logger.error("Failed to read {} due to {}", staticVcrClustermapFile, e.toString());
+        throw new RuntimeException(e);
+      }
+
+      // Get vcr nodes
+      vcrNodes.set(staticVcrClustermap.getCloudDataNodes());
+
+      for (String partition : replicationConfig.replicationVcrRecoveryPartitions) {
+        // add vcr node
+        try {
+           addCloudReplica(partition);
+        } catch (ReplicationException e) {
+           logger.error("Failed to add cloud replica {} due to {}", partition, e.toString());
+        }
+      }
+    }
 
     // Add listener for new coming assigned partition
     clusterParticipant.registerPartitionStateChangeListener(

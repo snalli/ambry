@@ -20,6 +20,8 @@ import com.github.ambry.account.AccountServiceCallback;
 import com.github.ambry.account.AccountServiceFactory;
 import com.github.ambry.accountstats.AccountStatsMySqlStore;
 import com.github.ambry.accountstats.AccountStatsMySqlStoreFactory;
+import com.github.ambry.cloud.RecoveryManager;
+import com.github.ambry.cloud.azure.AzureCloudConfig;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
@@ -91,6 +93,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import org.checkerframework.checker.units.qual.A;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -111,6 +114,7 @@ public class AmbryServer {
   private StatsManager statsManager = null;
   private ReplicationManager replicationManager = null;
   private CloudToStoreReplicationManager cloudToStoreReplicationManager = null;
+  private RecoveryManager recoveryManager = null;
   private static final Logger logger = LoggerFactory.getLogger(AmbryServer.class);
   private final VerifiableProperties properties;
   private final ClusterAgentsFactory clusterAgentsFactory;
@@ -202,6 +206,7 @@ public class AmbryServer {
       ClusterMapConfig clusterMapConfig = new ClusterMapConfig(properties);
       StatsManagerConfig statsConfig = new StatsManagerConfig(properties);
       CloudConfig cloudConfig = new CloudConfig(properties);
+      AzureCloudConfig azureCloudConfig = new AzureCloudConfig(properties);
       // verify the configs
       properties.verify();
 
@@ -271,6 +276,13 @@ public class AmbryServer {
                 clusterParticipants.get(0));
         cloudToStoreReplicationManager.start();
       }
+
+      recoveryManager =
+          new RecoveryManager(replicationConfig, clusterMapConfig, storeConfig, storageManager,
+              storeKeyFactory, clusterMap, scheduler, nodeId, connectionPool, registry, notificationSystem,
+              storeKeyConverterFactory, serverConfig.serverMessageTransformer, vcrClusterSpectator,
+              clusterParticipants.get(0), cloudConfig, azureCloudConfig);
+      recoveryManager.start();
 
       logger.info("Creating StatsManager to publish stats");
 

@@ -310,6 +310,7 @@ project(':ambry-server') {
                 project(':ambry-messageformat'),
                 project(':ambry-network'),
                 project(':ambry-protocol'),
+                project(':ambry-cloud'),
                 project(':ambry-commons'),
                 project(':ambry-store'),
                 project(':ambry-utils'),

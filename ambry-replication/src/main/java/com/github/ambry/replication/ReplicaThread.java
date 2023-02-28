@@ -97,9 +97,9 @@ public class ReplicaThread implements Runnable {
   private final CountDownLatch shutdownLatch = new CountDownLatch(1);
   private volatile boolean running;
   private final FindTokenHelper findTokenHelper;
-  private final ClusterMap clusterMap;
-  private final AtomicInteger correlationIdGenerator;
-  private final DataNodeId dataNodeId;
+  protected ClusterMap clusterMap;
+  protected final AtomicInteger correlationIdGenerator;
+  protected final DataNodeId dataNodeId;
   private final ConnectionPool connectionPool;
   private final NetworkClient networkClient;
   private final ReplicationConfig replicationConfig;
@@ -235,7 +235,7 @@ public class ReplicaThread implements Runnable {
     return unmodifiableReplicationDisabledPartitions;
   }
 
-  String getName() {
+  public String getName() {
     return threadName;
   }
 
@@ -593,8 +593,8 @@ public class ReplicaThread implements Runnable {
       boolean inBackoff = time.milliseconds() < remoteReplicaInfo.getReEnableReplicationTime();
       if (replicaId.isDown() || inBackoff || remoteReplicaInfo.getLocalStore().getCurrentState() == ReplicaState.OFFLINE
           || replicationDisabledPartitions.contains(replicaId.getPartitionId())) {
-        logger.debug(
-            "Skipping replication on replica {} because one of following conditions is true: remote replica is down "
+        logger.info(
+            "|snkt| Skipping replication on replica {} because one of following conditions is true: remote replica is down "
                 + "= {}; in backoff = {}; local store is offline = {}; replication is disabled = {}.",
             replicaId.getPartitionId().toPathString(), replicaId.isDown(), inBackoff,
             remoteReplicaInfo.getLocalStore().getCurrentState() == ReplicaState.OFFLINE,
@@ -882,7 +882,7 @@ public class ReplicaThread implements Runnable {
    * @throws ReplicationException
    * @throws IOException
    */
-  ReplicaMetadataResponse getReplicaMetadataResponse(List<RemoteReplicaInfo> replicasToReplicatePerNode,
+  protected ReplicaMetadataResponse getReplicaMetadataResponse(List<RemoteReplicaInfo> replicasToReplicatePerNode,
       ConnectedChannel connectedChannel, DataNodeId remoteNode) throws ReplicationException, IOException {
     long replicaMetadataRequestStartTime = time.milliseconds();
     ChannelOutput channelOutput = null;
@@ -1162,10 +1162,14 @@ public class ReplicaThread implements Runnable {
     if (!partitionRequestInfoList.isEmpty()) {
       return new GetRequest(correlationIdGenerator.incrementAndGet(),
           GetRequest.Replication_Client_Id_Prefix + dataNodeId.getHostname() + "[" + dataNodeId.getDatacenterName()
-              + "]", MessageFormatFlags.All, partitionRequestInfoList,
+              + "]", getMessageFormatFlagsForReplication(), partitionRequestInfoList,
           replicationConfig.replicationIncludeAll ? GetOption.Include_All : GetOption.None);
     }
     return null;
+  }
+
+  protected MessageFormatFlags getMessageFormatFlagsForReplication() {
+    return MessageFormatFlags.All;
   }
 
   /**
@@ -1660,7 +1664,7 @@ public class ReplicaThread implements Runnable {
     return exchangeMetadataResponsesInEachCycle;
   }
 
-  static class ExchangeMetadataResponse {
+  public static class ExchangeMetadataResponse {
     // Set of messages from remote replica missing in the local store.
     final Set<MessageInfo> missingStoreMessages;
     // Set of messages whose blobs are now present in local store  but their properties (ttl_update, delete, undelete)
@@ -1668,9 +1672,9 @@ public class ReplicaThread implements Runnable {
     final Set<MessageInfo> receivedStoreMessagesWithUpdatesPending;
     // map of remote keys to their converted local store keys
     final Map<StoreKey, StoreKey> remoteKeyToLocalKeyMap;
-    final FindToken remoteToken;
-    final long localLagFromRemoteInBytes;
-    final ServerErrorCode serverErrorCode;
+    public final FindToken remoteToken;
+    public final long localLagFromRemoteInBytes;
+    public final ServerErrorCode serverErrorCode;
     final Time time;
     // Time (in secs) at which last missing message was received. This is used in leader-based cross colo replication
     // to do cross colo fetches for non-leader replica pairs if there are still few missing local store messages and
@@ -1690,7 +1694,7 @@ public class ReplicaThread implements Runnable {
       this.receivedStoreMessagesWithUpdatesPending = new HashSet<>();
     }
 
-    ExchangeMetadataResponse(ServerErrorCode errorCode) {
+    public ExchangeMetadataResponse(ServerErrorCode errorCode) {
       this.missingStoreMessages = null;
       this.remoteKeyToLocalKeyMap = null;
       this.remoteToken = null;
@@ -1735,7 +1739,7 @@ public class ReplicaThread implements Runnable {
      * Get missing store messages in this metadata exchange.
      * @return set of missing store messages as a new collection.
      */
-    synchronized Set<MessageInfo> getMissingStoreMessages() {
+    public synchronized Set<MessageInfo> getMissingStoreMessages() {
       return missingStoreMessages == null ? Collections.emptySet() : new HashSet<>(missingStoreMessages);
     }
 
