@@ -187,7 +187,7 @@ public class RecoveryThread extends ReplicaThread {
           ++numPages;
           long resultFetchtime = System.currentTimeMillis() - startTime;
           logger.info(
-              "| snkt | [{}] | Received cosmos query results page = {}, time = {}, RU = {}, numRows = {}, tokenLen = {}, isTokenNull = {}, isTokenSameAsPrevious = {}",
+              "| snkt | [{}] | Received cosmos query results page = {}, time = {} ms, RU = {}/s, numRows = {}, tokenLen = {}, isTokenNull = {}, isTokenSameAsPrevious = {}",
               queryName, numPages, resultFetchtime, requestCharge,
               page != null ? page.getResults().size() : "null",
               nextToken != null ? nextToken.length() : "null",
@@ -259,6 +259,10 @@ public class RecoveryThread extends ReplicaThread {
     remoteReplicaInfo.setLocalLagFromRemoteInBytes(exchangeMetadataResponse.localLagFromRemoteInBytes);
     // reset stored metadata response for this replica so that we send next request for metadata
     remoteReplicaInfo.setExchangeMetadataResponse(new ExchangeMetadataResponse(ServerErrorCode.No_Error));
+    CosmosUpdateTimeFindToken cosmosUpdateTimeFindToken = (CosmosUpdateTimeFindToken) exchangeMetadataResponse.remoteToken;
+    String recoveryTokenFile = String.join("/", remoteReplicaInfo.getLocalReplicaId().getMountPath(),
+        String.join("_", "recovery_token", String.valueOf(remoteReplicaInfo.getLocalReplicaId().getPartitionId().getId())));
+    fileManager.truncateAndWriteToFileVerbatim(recoveryTokenFile, cosmosUpdateTimeFindToken.getContinuationToken());
     logReplicationStatus(remoteReplicaInfo, exchangeMetadataResponse);
   }
 
