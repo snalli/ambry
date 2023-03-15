@@ -15,6 +15,7 @@ package com.github.ambry.cloud;
 
 import com.azure.cosmos.ConsistencyLevel;
 import com.azure.cosmos.CosmosContainer;
+import com.azure.cosmos.CosmosException;
 import com.azure.cosmos.models.CosmosQueryRequestOptions;
 import com.azure.cosmos.models.FeedResponse;
 import com.azure.cosmos.models.PartitionKey;
@@ -148,42 +149,46 @@ public class RecoveryThread extends ReplicaThread {
   protected ReplicaMetadataResponse getReplicaMetadataResponse(List<RemoteReplicaInfo> replicasToReplicatePerNode,
       ConnectedChannel connectedChannel, DataNodeId remoteNode) throws IOException {
     ReplicaMetadataResponse replicaMetadataResponse;
-    try {
-      List<ReplicaMetadataResponseInfo> replicaMetadataResponseList = new ArrayList<>(replicasToReplicatePerNode.size());
-      short replicaMetadataRequestVersion = ReplicaMetadataResponse.getCompatibleResponseVersion(replicationConfig.replicaMetadataRequestVersion);
-      short correlationId = (short) correlationIdGenerator.incrementAndGet();
-      for (RemoteReplicaInfo remoteReplicaInfo : replicasToReplicatePerNode) {
-        PartitionId partitionId = remoteReplicaInfo.getReplicaId().getPartitionId();
-        ReplicaType replicaType = remoteReplicaInfo.getReplicaId().getReplicaType();
-        Store store = remoteReplicaInfo.getLocalStore();
-        String partitionPath = String.valueOf(partitionId.getId());
-        DateFormat DATE_FORMAT = new SimpleDateFormat("dd MMM yyyy HH:mm:ss:SSS");
-        String currContinuationToken = ((CosmosUpdateTimeFindToken) remoteReplicaInfo.getToken()).getContinuationToken();
-        String COSMOS_QUERY = "select * from c where c.partitionId = \"%s\"";
-        String cosmosQuery = String.format(COSMOS_QUERY, partitionPath);
-        CosmosQueryRequestOptions cosmosQueryRequestOptions = new CosmosQueryRequestOptions();
-        cosmosQueryRequestOptions.setPartitionKey(new PartitionKey(partitionPath));
-        cosmosQueryRequestOptions.setResponseContinuationTokenLimitInKb(64);
-        cosmosQueryRequestOptions.setConsistencyLevel(ConsistencyLevel.CONSISTENT_PREFIX);
-        String queryName = "snkt-" + System.currentTimeMillis();
-        cosmosQueryRequestOptions.setQueryName(queryName);
-        logger.info("| snkt | queryName = {} | Sending cosmos query '{}'", queryName, cosmosQuery);
+    String COSMOS_QUERY = "select * from c where c.partitionId = \"%s\"";
+    List<ReplicaMetadataResponseInfo> replicaMetadataResponseList = new ArrayList<>(replicasToReplicatePerNode.size());
+    short replicaMetadataRequestVersion = ReplicaMetadataResponse.getCompatibleResponseVersion(replicationConfig.replicaMetadataRequestVersion);
+    short correlationId = (short) correlationIdGenerator.incrementAndGet();
+    for (RemoteReplicaInfo remoteReplicaInfo : replicasToReplicatePerNode) {
+      PartitionId partitionId = remoteReplicaInfo.getReplicaId().getPartitionId();
+      ReplicaType replicaType = remoteReplicaInfo.getReplicaId().getReplicaType();
+      Store store = remoteReplicaInfo.getLocalStore();
+      String partitionPath = String.valueOf(partitionId.getId());
+      String currContinuationToken = ((CosmosUpdateTimeFindToken) remoteReplicaInfo.getToken()).getContinuationToken();
+      String cosmosQuery = String.format(COSMOS_QUERY, partitionPath);
+      CosmosQueryRequestOptions cosmosQueryRequestOptions = new CosmosQueryRequestOptions();
+      cosmosQueryRequestOptions.setPartitionKey(new PartitionKey(partitionPath));
+      cosmosQueryRequestOptions.setConsistencyLevel(ConsistencyLevel.CONSISTENT_PREFIX);
+      String queryName = String.join("_", "recovery_query", partitionPath, String.valueOf(System.currentTimeMillis()));
+      cosmosQueryRequestOptions.setQueryName(queryName);
+      logger.info("| snkt | queryName = {} | Sending cosmos query '{}'", queryName, cosmosQuery);
+      try {
         long startTime = System.currentTimeMillis();
         Iterable<FeedResponse<CloudBlobMetadata>> cloudBlobMetadataIter =
             cosmosContainer.queryItems(cosmosQuery, cosmosQueryRequestOptions, CloudBlobMetadata.class).iterableByPage(currContinuationToken);
-        long queryRuntime = System.currentTimeMillis() - startTime;
-        logger.info("| snkt | queryName = {} | Received cosmos query results", queryName);
         long lastUpdateTime = -1;
-        int numPages = 0, numResults = 0;
+        int numPages = 0;
         double requestCharge = 0;
         long totalBytesRead = 0;
         List<MessageInfo> messageEntries = new ArrayList<>();
         for (FeedResponse<CloudBlobMetadata> page : cloudBlobMetadataIter) {
           String currToken = getToken(currContinuationToken);
           String nextToken = getToken(page.getContinuationToken());
+          requestCharge += page.getRequestCharge();
+          for (CloudBlobMetadata cloudBlobMetadata : page.getResults()) {
+            messageEntries.add(getMessageInfoFromMetadata(cloudBlobMetadata));
+            lastUpdateTime = Math.max(lastUpdateTime, cloudBlobMetadata.getLastUpdateTime());
+            totalBytesRead += cloudBlobMetadata.getSize();
+          }
+          ++numPages;
+          long resultFetchtime = System.currentTimeMillis() - startTime;
           logger.info(
-              "| snkt | queryName = {} | Received cosmos query results page = {}, numRows = {}, tokenLen = {}, isTokenNull = {}, isTokenSameAsPrevious = {}",
-              queryName, numPages + 1,
+              "| snkt | [{}] | Received cosmos query results page = {}, time = {}, RU = {}, numRows = {}, tokenLen = {}, isTokenNull = {}, isTokenSameAsPrevious = {}",
+              queryName, numPages, resultFetchtime, requestCharge,
               page != null ? page.getResults().size() : "null",
               nextToken != null ? nextToken.length() : "null",
               nextToken != null ? nextToken.isEmpty() : "null",
@@ -191,30 +196,20 @@ public class RecoveryThread extends ReplicaThread {
           if (nextToken != null && !nextToken.isEmpty()) {
             currContinuationToken = page.getContinuationToken();
           }
-          requestCharge += page.getRequestCharge();
-          for (CloudBlobMetadata cloudBlobMetadata : page.getResults()) {
-            messageEntries.add(getMessageInfoFromMetadata(cloudBlobMetadata));
-            lastUpdateTime = Math.max(lastUpdateTime, cloudBlobMetadata.getLastUpdateTime());
-            totalBytesRead += cloudBlobMetadata.getSize();
-            ++numResults;
-          }
-          ++numPages;
           break;
         }
-        logger.info(
-            "| snkt | queryName = {} | Received cosmos query results | queryRuntime = {} | numPages = {} | numResults = {} | requestCharge = {} | lastUpdateTime = {} | lastUpdateDateTime = {}",
-            queryName, queryRuntime, numPages, numResults, requestCharge, lastUpdateTime, DATE_FORMAT.format(lastUpdateTime));
         replicaMetadataResponseList.add(new ReplicaMetadataResponseInfo(partitionId, replicaType,
             new CosmosUpdateTimeFindToken(lastUpdateTime, totalBytesRead, currContinuationToken),
             messageEntries, getRemoteReplicaLag(store, totalBytesRead), replicaMetadataRequestVersion));
+        // Catching and printing CosmosException does not work. The error is thrown and printed elsewhere.
+      } catch (Exception exception) {
+        logger.error("[{}] Failed due to {}", queryName, exception);
+        throw exception;
       }
-      replicaMetadataResponse =
-          new ReplicaMetadataResponse(correlationId, this.dataNodeId.getHostname(), ServerErrorCode.No_Error,
-              replicaMetadataResponseList, replicaMetadataRequestVersion);
-    } catch (Exception e) {
-      logger.error("Failed to recover from cosmos db due to {}", e);
-      throw e;
     }
+    replicaMetadataResponse =
+        new ReplicaMetadataResponse(correlationId, this.dataNodeId.getHostname(), ServerErrorCode.No_Error,
+            replicaMetadataResponseList, replicaMetadataRequestVersion);
     return replicaMetadataResponse;
   }
 
