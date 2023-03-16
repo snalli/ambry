@@ -158,7 +158,10 @@ public class RecoveryThread extends ReplicaThread {
       ReplicaType replicaType = remoteReplicaInfo.getReplicaId().getReplicaType();
       Store store = remoteReplicaInfo.getLocalStore();
       String partitionPath = String.valueOf(partitionId.getId());
-      String currContinuationToken = ((CosmosUpdateTimeFindToken) remoteReplicaInfo.getToken()).getContinuationToken();
+
+      RecoveryToken currRecoveryToken = (RecoveryToken) remoteReplicaInfo.getToken();
+      RecoveryToken nextRecoveryToken = new RecoveryToken();
+
       String cosmosQuery = String.format(COSMOS_QUERY, partitionPath);
       CosmosQueryRequestOptions cosmosQueryRequestOptions = new CosmosQueryRequestOptions();
       cosmosQueryRequestOptions.setPartitionKey(new PartitionKey(partitionPath));
@@ -169,37 +172,38 @@ public class RecoveryThread extends ReplicaThread {
       try {
         long startTime = System.currentTimeMillis();
         Iterable<FeedResponse<CloudBlobMetadata>> cloudBlobMetadataIter =
-            cosmosContainer.queryItems(cosmosQuery, cosmosQueryRequestOptions, CloudBlobMetadata.class).iterableByPage(currContinuationToken);
-        long lastUpdateTime = -1;
+            cosmosContainer.queryItems(cosmosQuery, cosmosQueryRequestOptions, CloudBlobMetadata.class).iterableByPage(currRecoveryToken.getCosmosContinuationToken());
         int numPages = 0;
         double requestCharge = 0;
         long totalBytesRead = 0;
         List<MessageInfo> messageEntries = new ArrayList<>();
         for (FeedResponse<CloudBlobMetadata> page : cloudBlobMetadataIter) {
-          String currToken = getToken(currContinuationToken);
-          String nextToken = getToken(page.getContinuationToken());
           requestCharge += page.getRequestCharge();
           for (CloudBlobMetadata cloudBlobMetadata : page.getResults()) {
             messageEntries.add(getMessageInfoFromMetadata(cloudBlobMetadata));
-            lastUpdateTime = Math.max(lastUpdateTime, cloudBlobMetadata.getLastUpdateTime());
             totalBytesRead += cloudBlobMetadata.getSize();
           }
+          String nextCosmosContinuationToken = getCosmosContinuationToken(page.getContinuationToken());
+          nextRecoveryToken = new RecoveryToken(queryName,
+              nextCosmosContinuationToken == null ? currRecoveryToken.getCosmosContinuationToken() : nextCosmosContinuationToken,
+              currRecoveryToken.getRequestUnits() + page.getRequestCharge(),
+              currRecoveryToken.getNumItems() + (currRecoveryToken.isEndOfPartitionReached() ? 0 : page.getResults().size()),
+              currRecoveryToken.getNumBlobBytes() + (currRecoveryToken.isEndOfPartitionReached() ? 0 : totalBytesRead),
+              nextCosmosContinuationToken == null);
           ++numPages;
           long resultFetchtime = System.currentTimeMillis() - startTime;
           logger.info(
               "| snkt | [{}] | Received cosmos query results page = {}, time = {} ms, RU = {}/s, numRows = {}, tokenLen = {}, isTokenNull = {}, isTokenSameAsPrevious = {}",
               queryName, numPages, resultFetchtime, requestCharge,
               page != null ? page.getResults().size() : "null",
-              nextToken != null ? nextToken.length() : "null",
-              nextToken != null ? nextToken.isEmpty() : "null",
-              nextToken != null ? nextToken.equals(currToken) : "null");
-          if (nextToken != null && !nextToken.isEmpty()) {
-            currContinuationToken = page.getContinuationToken();
-          }
+              nextCosmosContinuationToken != null ? nextCosmosContinuationToken.length() : "null",
+              nextCosmosContinuationToken != null ? nextCosmosContinuationToken.isEmpty() : "null",
+              nextCosmosContinuationToken != null ? nextCosmosContinuationToken.equals(currRecoveryToken.getCosmosContinuationToken()) : "null");
+
           break;
         }
         replicaMetadataResponseList.add(new ReplicaMetadataResponseInfo(partitionId, replicaType,
-            new CosmosUpdateTimeFindToken(lastUpdateTime, totalBytesRead, currContinuationToken),
+            nextRecoveryToken,
             messageEntries, getRemoteReplicaLag(store, totalBytesRead), replicaMetadataRequestVersion));
         // Catching and printing CosmosException does not work. The error is thrown and printed elsewhere.
       } catch (Exception exception) {
@@ -259,20 +263,19 @@ public class RecoveryThread extends ReplicaThread {
     remoteReplicaInfo.setLocalLagFromRemoteInBytes(exchangeMetadataResponse.localLagFromRemoteInBytes);
     // reset stored metadata response for this replica so that we send next request for metadata
     remoteReplicaInfo.setExchangeMetadataResponse(new ExchangeMetadataResponse(ServerErrorCode.No_Error));
-    CosmosUpdateTimeFindToken cosmosUpdateTimeFindToken = (CosmosUpdateTimeFindToken) exchangeMetadataResponse.remoteToken;
+    RecoveryToken recoveryToken = (RecoveryToken) exchangeMetadataResponse.remoteToken;
     String recoveryTokenFile = String.join("/", remoteReplicaInfo.getLocalReplicaId().getMountPath(),
         String.join("_", "recovery_token", String.valueOf(remoteReplicaInfo.getLocalReplicaId().getPartitionId().getId())));
-    fileManager.truncateAndWriteToFileVerbatim(recoveryTokenFile, cosmosUpdateTimeFindToken.getContinuationToken());
+    fileManager.truncateAndWriteToFileVerbatim(recoveryTokenFile, recoveryToken.toString());
     logReplicationStatus(remoteReplicaInfo, exchangeMetadataResponse);
   }
 
-  protected String getToken(String continuationToken) {
+  protected String getCosmosContinuationToken(String continuationToken) {
     if (continuationToken == null || continuationToken.isEmpty()) {
       return null;
     }
-    String compositeToken = null;
     try {
-    JSONObject continuationTokenJson = new JSONObject(continuationToken);
+      JSONObject continuationTokenJson = new JSONObject(continuationToken);
     // compositeToken = continuationTokenJson.getString("token");
     // compositeToken = compositeToken.substring(compositeToken.indexOf('{'), compositeToken.lastIndexOf('}') + 1).replace('\"', '"');
       return continuationTokenJson.getString("token");

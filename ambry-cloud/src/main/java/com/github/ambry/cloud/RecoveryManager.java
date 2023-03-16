@@ -162,17 +162,15 @@ public class RecoveryManager extends ReplicationEngine {
       String recoveryTokenFile = String.join("/", localReplica.getMountPath(), String.join("_", "recovery_token", partitionName));
       logger.info("| snkt | Adding partition = {}/{} for recovery, token = {}", localReplica.getMountPath(), partitionName, recoveryTokenFile);
       Path recoveryTokenFilePath = Paths.get(recoveryTokenFile);
-      String recoveryToken;
+      RecoveryToken recoveryToken;
       try {
         if (!Files.exists(recoveryTokenFilePath)) {
           Files.createFile(recoveryTokenFilePath);
         }
-        recoveryToken = Utils.readStringFromFile(recoveryTokenFile);
-        logger.info("|snkt| Got recovery token = {}", recoveryToken);
+        recoveryToken = new RecoveryToken(new JSONObject(Utils.readStringFromFile(recoveryTokenFile)));
         if (recoveryToken.isEmpty()) {
           // null is acceptable by cosmosdb but not an empty string
           logger.info("|snkt| recovery token is null empty, starting from scratch");
-          recoveryToken = null;
         } else {
           logger.info("|snkt| recovery token is not empty, resuming from where i left off");
         }
@@ -180,13 +178,12 @@ public class RecoveryManager extends ReplicationEngine {
         logger.error("Failed to create or open file {} due to {}", recoveryTokenFile, e);
         throw new RuntimeException(e);
       }
-      CosmosUpdateTimeFindToken cosmosUpdateTimeFindToken = new CosmosUpdateTimeFindToken(0,0, recoveryToken);
       ////////
       CloudReplica dummyReplica = new CloudReplica(partitionId, dummyDataNodeId);
       FindTokenFactory findTokenFactory =
           tokenHelper.getFindTokenFactoryFromReplicaType(dummyReplica.getReplicaType());
       RemoteReplicaInfo remoteReplicaInfo =
-          new RemoteReplicaInfo(dummyReplica, localReplica, localStore, cosmosUpdateTimeFindToken,
+          new RemoteReplicaInfo(dummyReplica, localReplica, localStore, recoveryToken,
               storeConfig.storeDataFlushIntervalSeconds * SystemTime.MsPerSec * Replication_Delay_Multiplier,
               SystemTime.getInstance(), dummyDataNodeId.getPortToConnectTo());
       List<RemoteReplicaInfo> remoteReplicaInfos = Collections.singletonList(remoteReplicaInfo);
