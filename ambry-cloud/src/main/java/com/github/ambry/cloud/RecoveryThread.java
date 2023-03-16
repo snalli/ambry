@@ -165,7 +165,8 @@ public class RecoveryThread extends ReplicaThread {
       String cosmosQuery = String.format(COSMOS_QUERY, partitionPath);
       CosmosQueryRequestOptions cosmosQueryRequestOptions = new CosmosQueryRequestOptions();
       cosmosQueryRequestOptions.setPartitionKey(new PartitionKey(partitionPath));
-      cosmosQueryRequestOptions.setConsistencyLevel(ConsistencyLevel.CONSISTENT_PREFIX);
+      // eventual consistency is cheapest
+      cosmosQueryRequestOptions.setConsistencyLevel(ConsistencyLevel.EVENTUAL);
       String queryName = String.join("_", "recovery_query", partitionPath, String.valueOf(System.currentTimeMillis()));
       cosmosQueryRequestOptions.setQueryName(queryName);
       logger.info("| snkt | queryName = {} | Sending cosmos query '{}'", queryName, cosmosQuery);
