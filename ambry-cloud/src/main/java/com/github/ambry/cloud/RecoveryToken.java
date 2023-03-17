@@ -16,14 +16,18 @@ package com.github.ambry.cloud;
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenType;
 import com.github.ambry.utils.SystemTime;
+import java.lang.reflect.Field;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.util.LinkedHashMap;
 import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 public class RecoveryToken implements FindToken {
-
+  private final Logger logger = LoggerFactory.getLogger(RecoveryToken.class);
   public static final String QUERY_NAME = "last_query_name";
   public static final String COSMOS_CONTINUATION_TOKEN = "cosmos_continuation_token";
   public static final String REQUEST_UNITS = "request_units_charged_so_far";
@@ -120,16 +124,25 @@ public class RecoveryToken implements FindToken {
   }
   public String toString() {
     JSONObject jsonObject = new JSONObject();
-    jsonObject.put(QUERY_NAME, this.getQueryName());
+    try {
+      Field changeMap = jsonObject.getClass().getDeclaredField("map");
+      changeMap.setAccessible(true);
+      changeMap.set(jsonObject, new LinkedHashMap<>());
+      changeMap.setAccessible(false);
+    } catch (IllegalAccessException | NoSuchFieldException e) {
+      logger.error(e.getMessage());
+      jsonObject = new JSONObject();
+    }
     jsonObject.put(COSMOS_CONTINUATION_TOKEN, this.getCosmosContinuationToken());
-    jsonObject.put(REQUEST_UNITS, this.getRequestUnits());
-    jsonObject.put(NUM_ITEMS, this.getNumItems());
-    jsonObject.put(NUM_BLOB_BYTES, this.getNumBlobBytes());
-    jsonObject.put(END_OF_PARTITION, this.isEndOfPartitionReached());
-    jsonObject.put(TOKEN_CREATE_TIME, this.getTokenCreateTime());
     jsonObject.put(BACKUP_START_TIME, backupStartTime);
     jsonObject.put(BACKUP_END_TIME, backupEndTime);
+    jsonObject.put(END_OF_PARTITION, this.isEndOfPartitionReached());
+    jsonObject.put(QUERY_NAME, this.getQueryName());
+    jsonObject.put(TOKEN_CREATE_TIME, this.getTokenCreateTime());
     jsonObject.put(LAST_QUERY_TIME, lastQueryTime);
+    jsonObject.put(NUM_ITEMS, this.getNumItems());
+    jsonObject.put(NUM_BLOB_BYTES, this.getNumBlobBytes());
+    jsonObject.put(REQUEST_UNITS, this.getRequestUnits());
     return jsonObject.toString(4);
   }
 
