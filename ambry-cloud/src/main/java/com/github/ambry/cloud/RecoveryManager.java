@@ -162,26 +162,27 @@ public class RecoveryManager extends ReplicationEngine {
       String recoveryTokenFile = String.join("/", localReplica.getMountPath(), String.join("_", "recovery_token", partitionName));
       logger.info("| snkt | Adding partition = {}/{} for recovery, token = {}", localReplica.getMountPath(), partitionName, recoveryTokenFile);
       Path recoveryTokenFilePath = Paths.get(recoveryTokenFile);
-      RecoveryToken recoveryToken;
+      RecoveryToken recoveryToken = null;
       try {
         if (!Files.exists(recoveryTokenFilePath)) {
           Files.createFile(recoveryTokenFilePath);
+        } else {
+          recoveryToken = new RecoveryToken(new JSONObject(Utils.readStringFromFile(recoveryTokenFile)));
         }
-        recoveryToken = new RecoveryToken(new JSONObject(Utils.readStringFromFile(recoveryTokenFile)));
-        if (recoveryToken.isEmpty()) {
+        if (recoveryToken == null || recoveryToken.isEmpty()) {
           // null is acceptable by cosmosdb but not an empty string
           logger.info("|snkt| recovery token is null empty, starting from scratch");
+          recoveryToken = new RecoveryToken();
         } else {
           logger.info("|snkt| recovery token is not empty, resuming from where i left off");
         }
+
       } catch (IOException e) {
         logger.error("Failed to create or open file {} due to {}", recoveryTokenFile, e);
         throw new RuntimeException(e);
       }
       ////////
       CloudReplica dummyReplica = new CloudReplica(partitionId, dummyDataNodeId);
-      FindTokenFactory findTokenFactory =
-          tokenHelper.getFindTokenFactoryFromReplicaType(dummyReplica.getReplicaType());
       RemoteReplicaInfo remoteReplicaInfo =
           new RemoteReplicaInfo(dummyReplica, localReplica, localStore, recoveryToken,
               storeConfig.storeDataFlushIntervalSeconds * SystemTime.MsPerSec * Replication_Delay_Multiplier,

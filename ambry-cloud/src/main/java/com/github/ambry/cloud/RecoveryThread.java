@@ -63,6 +63,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.text.DateFormat;
+import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -147,7 +148,7 @@ public class RecoveryThread extends ReplicaThread {
    */
   @Override
   protected ReplicaMetadataResponse getReplicaMetadataResponse(List<RemoteReplicaInfo> replicasToReplicatePerNode,
-      ConnectedChannel connectedChannel, DataNodeId remoteNode) throws IOException {
+      ConnectedChannel connectedChannel, DataNodeId remoteNode) throws IOException, ParseException {
     ReplicaMetadataResponse replicaMetadataResponse;
     String COSMOS_QUERY = "select * from c where c.partitionId = \"%s\"";
     List<ReplicaMetadataResponseInfo> replicaMetadataResponseList = new ArrayList<>(replicasToReplicatePerNode.size());
@@ -161,7 +162,7 @@ public class RecoveryThread extends ReplicaThread {
 
       RecoveryToken currRecoveryToken = (RecoveryToken) remoteReplicaInfo.getToken();
       RecoveryToken nextRecoveryToken = new RecoveryToken();
-
+      // TODO: If currtoken is end of partition, don't send query
       String cosmosQuery = String.format(COSMOS_QUERY, partitionPath);
       CosmosQueryRequestOptions cosmosQueryRequestOptions = new CosmosQueryRequestOptions();
       cosmosQueryRequestOptions.setPartitionKey(new PartitionKey(partitionPath));
@@ -176,21 +177,23 @@ public class RecoveryThread extends ReplicaThread {
             cosmosContainer.queryItems(cosmosQuery, cosmosQueryRequestOptions, CloudBlobMetadata.class).iterableByPage(currRecoveryToken.getCosmosContinuationToken());
         int numPages = 0;
         double requestCharge = 0;
-        long totalBytesRead = 0;
+        long totalBlobBytesRead = 0, backupStartTime = 0, backupEndTime = 0;
         List<MessageInfo> messageEntries = new ArrayList<>();
         for (FeedResponse<CloudBlobMetadata> page : cloudBlobMetadataIter) {
           requestCharge += page.getRequestCharge();
           for (CloudBlobMetadata cloudBlobMetadata : page.getResults()) {
             messageEntries.add(getMessageInfoFromMetadata(cloudBlobMetadata));
-            totalBytesRead += cloudBlobMetadata.getSize();
+            totalBlobBytesRead += cloudBlobMetadata.getSize();
+            backupStartTime = Math.min(currRecoveryToken.getBackupStartTime(), cloudBlobMetadata.getLastUpdateTime());
+            backupEndTime = Math.max(currRecoveryToken.getBackupEndTime(), cloudBlobMetadata.getLastUpdateTime());
           }
           String nextCosmosContinuationToken = getCosmosContinuationToken(page.getContinuationToken());
           nextRecoveryToken = new RecoveryToken(queryName,
-              nextCosmosContinuationToken == null ? currRecoveryToken.getCosmosContinuationToken() : nextCosmosContinuationToken,
+              nextCosmosContinuationToken == null ? currRecoveryToken.getCosmosContinuationToken() : page.getContinuationToken(),
               currRecoveryToken.getRequestUnits() + page.getRequestCharge(),
               currRecoveryToken.getNumItems() + (currRecoveryToken.isEndOfPartitionReached() ? 0 : page.getResults().size()),
-              currRecoveryToken.getNumBlobBytes() + (currRecoveryToken.isEndOfPartitionReached() ? 0 : totalBytesRead),
-              nextCosmosContinuationToken == null);
+              currRecoveryToken.getNumBlobBytes() + (currRecoveryToken.isEndOfPartitionReached() ? 0 : totalBlobBytesRead),
+              nextCosmosContinuationToken == null, currRecoveryToken.getTokenCreateTime(), backupStartTime, backupEndTime);
           ++numPages;
           long resultFetchtime = System.currentTimeMillis() - startTime;
           logger.info(
@@ -205,7 +208,7 @@ public class RecoveryThread extends ReplicaThread {
         }
         replicaMetadataResponseList.add(new ReplicaMetadataResponseInfo(partitionId, replicaType,
             nextRecoveryToken,
-            messageEntries, getRemoteReplicaLag(store, totalBytesRead), replicaMetadataRequestVersion));
+            messageEntries, getRemoteReplicaLag(store, totalBlobBytesRead), replicaMetadataRequestVersion));
         // Catching and printing CosmosException does not work. The error is thrown and printed elsewhere.
       } catch (Exception exception) {
         logger.error("[{}] Failed due to {}", queryName, exception);

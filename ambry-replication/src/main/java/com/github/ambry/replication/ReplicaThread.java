@@ -63,6 +63,7 @@ import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -883,7 +884,8 @@ public class ReplicaThread implements Runnable {
    * @throws IOException
    */
   protected ReplicaMetadataResponse getReplicaMetadataResponse(List<RemoteReplicaInfo> replicasToReplicatePerNode,
-      ConnectedChannel connectedChannel, DataNodeId remoteNode) throws ReplicationException, IOException {
+      ConnectedChannel connectedChannel, DataNodeId remoteNode) throws ReplicationException, IOException,
+                                                                       ParseException {
     long replicaMetadataRequestStartTime = time.milliseconds();
     ChannelOutput channelOutput = null;
     try {
