@@ -24,16 +24,16 @@ import org.json.JSONObject;
 
 public class RecoveryToken implements FindToken {
 
-  public static final String QUERY_NAME = "query_name";
+  public static final String QUERY_NAME = "last_query_name";
   public static final String COSMOS_CONTINUATION_TOKEN = "cosmos_continuation_token";
   public static final String REQUEST_UNITS = "request_units_charged_so_far";
   public static final String NUM_ITEMS = "num_items_read_so_far";
   public static final String NUM_BLOB_BYTES = "blob_bytes_read_so_far";
   public static final String END_OF_PARTITION = "end_of_partition_reached";
 
-  public static final String TOKEN_CREATE_TIME = "token_create_time";
-  public static final String BACKUP_START_TIME = "backup_start_time";
-  public static final String BACKUP_END_TIME = "backup_end_time";
+  public static final String TOKEN_CREATE_TIME = "token_create_time_gmt";
+  public static final String BACKUP_START_TIME = "earliest_blob_create_time";
+  public static final String BACKUP_END_TIME = "latest_blob_update_time";
   public static final DateFormat DATE_FORMAT = new SimpleDateFormat("dd MMM yyyy HH:mm:ss:SSS");
 
   private String queryName = null;
