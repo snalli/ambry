@@ -30,10 +30,10 @@ public class RecoveryToken implements FindToken {
   public static final String NUM_ITEMS = "num_items_read_so_far";
   public static final String NUM_BLOB_BYTES = "blob_bytes_read_so_far";
   public static final String END_OF_PARTITION = "end_of_partition_reached";
-
   public static final String TOKEN_CREATE_TIME = "token_create_time_gmt";
   public static final String BACKUP_START_TIME = "earliest_blob_create_time";
   public static final String BACKUP_END_TIME = "latest_blob_update_time";
+  public static final String LAST_QUERY_TIME = "last_query_time_gmt";
   public static final DateFormat DATE_FORMAT = new SimpleDateFormat("dd MMM yyyy HH:mm:ss:SSS");
 
   private String queryName = null;
@@ -45,10 +45,11 @@ public class RecoveryToken implements FindToken {
   private final String tokenCreateTime;
   private String backupStartTime = "01 Jan 3000 00:00:00:000";
   private String backupEndTime = "01 Jan 2000 00:00:00:000";
+  private String lastQueryTime = null;
 
 
   public RecoveryToken(String queryName, String cosmosContinuationToken, double requestUnits, long numItems,
-      long numBytes, boolean endOfPartitionReached, String tokenCreateTime, long backupStartTime, long backupEndTime) {
+      long numBytes, boolean endOfPartitionReached, String tokenCreateTime, long backupStartTime, long backupEndTime, long lastQueryTime) {
     this.queryName = queryName;
     this.cosmosContinuationToken = cosmosContinuationToken;
     this.requestUnits = requestUnits;
@@ -58,6 +59,7 @@ public class RecoveryToken implements FindToken {
     this.tokenCreateTime = tokenCreateTime;
     this.backupStartTime = DATE_FORMAT.format(backupStartTime);
     this.backupEndTime = DATE_FORMAT.format(backupEndTime);
+    this.lastQueryTime = DATE_FORMAT.format(lastQueryTime);
   }
 
   public RecoveryToken(JSONObject jsonObject) {
@@ -70,6 +72,7 @@ public class RecoveryToken implements FindToken {
     this.tokenCreateTime = jsonObject.getString(TOKEN_CREATE_TIME);
     this.backupStartTime = jsonObject.getString(BACKUP_START_TIME);
     this.backupEndTime = jsonObject.getString(BACKUP_END_TIME);
+    this.lastQueryTime = jsonObject.getString(LAST_QUERY_TIME);
   }
 
   public RecoveryToken() {
@@ -126,6 +129,7 @@ public class RecoveryToken implements FindToken {
     jsonObject.put(TOKEN_CREATE_TIME, this.getTokenCreateTime());
     jsonObject.put(BACKUP_START_TIME, backupStartTime);
     jsonObject.put(BACKUP_END_TIME, backupEndTime);
+    jsonObject.put(LAST_QUERY_TIME, lastQueryTime);
     return jsonObject.toString(4);
   }
 

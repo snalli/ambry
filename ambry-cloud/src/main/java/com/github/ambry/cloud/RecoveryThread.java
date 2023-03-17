@@ -164,7 +164,7 @@ public class RecoveryThread extends ReplicaThread {
       RecoveryToken nextRecoveryToken = new RecoveryToken();
 
       if (currRecoveryToken.isEndOfPartitionReached()) {
-        logger.info("|snkt| End of partition reached for {}", partitionPath);
+        logger.trace("|snkt| End of partition reached for {}", partitionPath);
         continue;
       }
 
@@ -173,9 +173,10 @@ public class RecoveryThread extends ReplicaThread {
       cosmosQueryRequestOptions.setPartitionKey(new PartitionKey(partitionPath));
       // eventual consistency is cheapest
       cosmosQueryRequestOptions.setConsistencyLevel(ConsistencyLevel.EVENTUAL);
-      String queryName = String.join("_", "recovery_query", partitionPath, String.valueOf(System.currentTimeMillis()));
+      long lastQueryTime = System.currentTimeMillis();
+      String queryName = String.join("_", "recovery_query", partitionPath, String.valueOf(lastQueryTime));
       cosmosQueryRequestOptions.setQueryName(queryName);
-      logger.info("| snkt | queryName = {} | Sending cosmos query '{}'", queryName, cosmosQuery);
+      logger.trace("| snkt | queryName = {} | Sending cosmos query '{}'", queryName, cosmosQuery);
       try {
         long startTime = System.currentTimeMillis();
         Iterable<FeedResponse<CloudBlobMetadata>> cloudBlobMetadataIter =
@@ -198,10 +199,10 @@ public class RecoveryThread extends ReplicaThread {
               currRecoveryToken.getRequestUnits() + page.getRequestCharge(),
               currRecoveryToken.getNumItems() + (currRecoveryToken.isEndOfPartitionReached() ? 0 : page.getResults().size()),
               currRecoveryToken.getNumBlobBytes() + (currRecoveryToken.isEndOfPartitionReached() ? 0 : totalBlobBytesRead),
-              nextCosmosContinuationToken == null, currRecoveryToken.getTokenCreateTime(), backupStartTime, backupEndTime);
+              nextCosmosContinuationToken == null, currRecoveryToken.getTokenCreateTime(), backupStartTime, backupEndTime, lastQueryTime);
           ++numPages;
           long resultFetchtime = System.currentTimeMillis() - startTime;
-          logger.info(
+          logger.trace(
               "| snkt | [{}] | Received cosmos query results page = {}, time = {} ms, RU = {}/s, numRows = {}, tokenLen = {}, isTokenNull = {}, isTokenSameAsPrevious = {}",
               queryName, numPages, resultFetchtime, requestCharge,
               page != null ? page.getResults().size() : "null",
@@ -340,7 +341,8 @@ public class RecoveryThread extends ReplicaThread {
         remoteReplicaInfo, remoteReplicaInfo.getLocalReplicaId().getReplicaType(),
         remoteReplicaInfo.getToken().toString(),
         exchangeMetadataResponse.localLagFromRemoteInBytes);
-    fileManager.truncateAndWriteToFile(getFilePath(remoteReplicaInfo, RECOVERY_STATUS_FILE), text);
+    logger.trace("|snkt|{}", text);
+    // fileManager.truncateAndWriteToFile(getFilePath(remoteReplicaInfo, RECOVERY_STATUS_FILE), text);
   }
 
   /**
