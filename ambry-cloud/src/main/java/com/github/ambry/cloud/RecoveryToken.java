@@ -43,7 +43,7 @@ public class RecoveryToken implements FindToken {
   private long numBlobBytes = 0;
   private boolean endOfPartitionReached = false;
   private final String tokenCreateTime;
-  private String backupStartTime = "01 Jan 2000 00:00:00:000";
+  private String backupStartTime = "01 Jan 3000 00:00:00:000";
   private String backupEndTime = "01 Jan 2000 00:00:00:000";
 
 

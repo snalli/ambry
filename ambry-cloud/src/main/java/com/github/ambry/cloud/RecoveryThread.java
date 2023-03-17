@@ -162,7 +162,12 @@ public class RecoveryThread extends ReplicaThread {
 
       RecoveryToken currRecoveryToken = (RecoveryToken) remoteReplicaInfo.getToken();
       RecoveryToken nextRecoveryToken = new RecoveryToken();
-      // TODO: If currtoken is end of partition, don't send query
+
+      if (currRecoveryToken.isEndOfPartitionReached()) {
+        logger.info("|snkt| End of partition reached for {}", partitionPath);
+        continue;
+      }
+
       String cosmosQuery = String.format(COSMOS_QUERY, partitionPath);
       CosmosQueryRequestOptions cosmosQueryRequestOptions = new CosmosQueryRequestOptions();
       cosmosQueryRequestOptions.setPartitionKey(new PartitionKey(partitionPath));
@@ -184,8 +189,8 @@ public class RecoveryThread extends ReplicaThread {
           for (CloudBlobMetadata cloudBlobMetadata : page.getResults()) {
             messageEntries.add(getMessageInfoFromMetadata(cloudBlobMetadata));
             totalBlobBytesRead += cloudBlobMetadata.getSize();
-            backupStartTime = Math.min(currRecoveryToken.getBackupStartTime(), cloudBlobMetadata.getLastUpdateTime());
-            backupEndTime = Math.max(currRecoveryToken.getBackupEndTime(), cloudBlobMetadata.getLastUpdateTime());
+            backupStartTime = Math.min(currRecoveryToken.getBackupStartTime(), cloudBlobMetadata.getCreationTime());
+            backupEndTime = Math.max(currRecoveryToken.getBackupEndTime(), cloudBlobMetadata.getLastUpdateTime()*1000);
           }
           String nextCosmosContinuationToken = getCosmosContinuationToken(page.getContinuationToken());
           nextRecoveryToken = new RecoveryToken(queryName,
