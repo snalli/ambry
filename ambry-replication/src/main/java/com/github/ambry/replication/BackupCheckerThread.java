@@ -117,7 +117,8 @@ public class BackupCheckerThread extends ReplicaThread {
     EnumSet<MessageInfoType> acceptableLocalBlobStates = EnumSet.of(MessageInfoType.TTL_UPDATE);
     EnumSet<StoreErrorCodes> acceptableStoreErrorCodes = EnumSet.noneOf(StoreErrorCodes.class);
     // Check local store once before logging an error
-    checkLocalStore(remoteBlob, remoteReplicaInfo, acceptableLocalBlobStates, acceptableStoreErrorCodes);
+    // TTL_UPDATE info is unavailable in azure
+    // checkLocalStore(remoteBlob, remoteReplicaInfo, acceptableLocalBlobStates, acceptableStoreErrorCodes);
   }
 
   /**
@@ -131,7 +132,8 @@ public class BackupCheckerThread extends ReplicaThread {
     EnumSet<MessageInfoType> acceptableLocalBlobStates = EnumSet.of(MessageInfoType.UNDELETE);
     EnumSet<StoreErrorCodes> acceptableStoreErrorCodes = EnumSet.noneOf(StoreErrorCodes.class);
     // Check local store once before logging an error
-    checkLocalStore(remoteBlob, remoteReplicaInfo, acceptableLocalBlobStates, acceptableStoreErrorCodes);
+    // Undelete info is unavailable in azure
+    // checkLocalStore(remoteBlob, remoteReplicaInfo, acceptableLocalBlobStates, acceptableStoreErrorCodes);
   }
 
   /**

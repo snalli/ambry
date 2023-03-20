@@ -178,9 +178,12 @@ public class RecoveryThread extends ReplicaThread {
       cosmosQueryRequestOptions.setQueryName(queryName);
       logger.trace("| snkt | queryName = {} | Sending cosmos query '{}'", queryName, cosmosQuery);
       try {
+
         long startTime = System.currentTimeMillis();
+
         Iterable<FeedResponse<CloudBlobMetadata>> cloudBlobMetadataIter =
             cosmosContainer.queryItems(cosmosQuery, cosmosQueryRequestOptions, CloudBlobMetadata.class).iterableByPage(currRecoveryToken.getCosmosContinuationToken());
+
         int numPages = 0;
         double requestCharge = 0;
         long totalBlobBytesRead = 0, backupStartTime = 0, backupEndTime = 0;
@@ -190,8 +193,8 @@ public class RecoveryThread extends ReplicaThread {
           for (CloudBlobMetadata cloudBlobMetadata : page.getResults()) {
             messageEntries.add(getMessageInfoFromMetadata(cloudBlobMetadata));
             totalBlobBytesRead += cloudBlobMetadata.getSize();
-            backupStartTime = Math.min(currRecoveryToken.getBackupStartTime(), cloudBlobMetadata.getCreationTime());
-            backupEndTime = Math.max(currRecoveryToken.getBackupEndTime(), cloudBlobMetadata.getLastUpdateTime()*1000);
+            backupStartTime = Math.min(currRecoveryToken.getBackupStartTimeMs(), cloudBlobMetadata.getCreationTime());
+            backupEndTime = Math.max(currRecoveryToken.getBackupEndTimeMs(), cloudBlobMetadata.getLastUpdateTime()*1000);
           }
           String nextCosmosContinuationToken = getCosmosContinuationToken(page.getContinuationToken());
           nextRecoveryToken = new RecoveryToken(queryName,
@@ -216,6 +219,7 @@ public class RecoveryThread extends ReplicaThread {
             nextRecoveryToken,
             messageEntries, getRemoteReplicaLag(store, totalBlobBytesRead), replicaMetadataRequestVersion));
         // Catching and printing CosmosException does not work. The error is thrown and printed elsewhere.
+
       } catch (Exception exception) {
         logger.error("[{}] Failed due to {}", queryName, exception);
         throw exception;

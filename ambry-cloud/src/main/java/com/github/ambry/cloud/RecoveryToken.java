@@ -115,11 +115,11 @@ public class RecoveryToken implements FindToken {
     return tokenCreateTime;
   }
 
-  public long getBackupStartTime() throws ParseException {
+  public long getBackupStartTimeMs() throws ParseException {
     return DATE_FORMAT.parse(backupStartTime).getTime();
   }
 
-  public long getBackupEndTime() throws ParseException {
+  public long getBackupEndTimeMs() throws ParseException {
     return DATE_FORMAT.parse(backupEndTime).getTime();
   }
   public String toString() {
