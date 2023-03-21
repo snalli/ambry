@@ -35,8 +35,10 @@ public class RecoveryToken implements FindToken {
   public static final String NUM_BLOB_BYTES = "blob_bytes_read_so_far";
   public static final String END_OF_PARTITION = "end_of_partition_reached";
   public static final String TOKEN_CREATE_TIME = "token_create_time_gmt";
-  public static final String BACKUP_START_TIME = "earliest_blob_create_time";
-  public static final String BACKUP_END_TIME = "latest_blob_update_time";
+  public static final String EARLIEST_BLOB = "earliest_blob_id";
+  public static final String BACKUP_START_TIME = "earliest_blob_create_time_gmt";
+  public static final String LATEST_BLOB = "latest_blob_id";
+  public static final String BACKUP_END_TIME = "latest_blob_update_time_gmt";
   public static final String LAST_QUERY_TIME = "last_query_time_gmt";
   public static final DateFormat DATE_FORMAT = new SimpleDateFormat("dd MMM yyyy HH:mm:ss:SSS");
 
@@ -47,13 +49,15 @@ public class RecoveryToken implements FindToken {
   private long numBlobBytes = 0;
   private boolean endOfPartitionReached = false;
   private final String tokenCreateTime;
-  private String backupStartTime = "01 Jan 3000 00:00:00:000";
-  private String backupEndTime = "01 Jan 2000 00:00:00:000";
+  private long backupStartTime = -1;
+  private long backupEndTime = -1;
   private String lastQueryTime = null;
-
+  private String firstBlobId = null;
+  private String lastBlobId = null;
 
   public RecoveryToken(String queryName, String cosmosContinuationToken, double requestUnits, long numItems,
-      long numBytes, boolean endOfPartitionReached, String tokenCreateTime, long backupStartTime, long backupEndTime, long lastQueryTime) {
+      long numBytes, boolean endOfPartitionReached, String tokenCreateTime, long backupStartTime, long backupEndTime,
+      long lastQueryTime, String firstBlobId, String lastBlobId) {
     this.queryName = queryName;
     this.cosmosContinuationToken = cosmosContinuationToken;
     this.requestUnits = requestUnits;
@@ -61,9 +65,11 @@ public class RecoveryToken implements FindToken {
     this.numBlobBytes = numBytes;
     this.endOfPartitionReached = endOfPartitionReached;
     this.tokenCreateTime = tokenCreateTime;
-    this.backupStartTime = DATE_FORMAT.format(backupStartTime);
-    this.backupEndTime = DATE_FORMAT.format(backupEndTime);
+    this.backupStartTime = backupStartTime;
+    this.backupEndTime = backupEndTime;
     this.lastQueryTime = DATE_FORMAT.format(lastQueryTime);
+    this.firstBlobId = firstBlobId;
+    this.lastBlobId = lastBlobId;
   }
 
   public RecoveryToken(JSONObject jsonObject) {
@@ -74,8 +80,10 @@ public class RecoveryToken implements FindToken {
     this.numBlobBytes = jsonObject.getLong(NUM_BLOB_BYTES);
     this.endOfPartitionReached = jsonObject.getBoolean(END_OF_PARTITION);
     this.tokenCreateTime = jsonObject.getString(TOKEN_CREATE_TIME);
-    this.backupStartTime = jsonObject.getString(BACKUP_START_TIME);
-    this.backupEndTime = jsonObject.getString(BACKUP_END_TIME);
+    this.firstBlobId = jsonObject.getString(EARLIEST_BLOB);
+    this.backupStartTime = jsonObject.getLong(BACKUP_START_TIME);
+    this.lastBlobId = jsonObject.getString(LATEST_BLOB);
+    this.backupEndTime = jsonObject.getLong(BACKUP_END_TIME);
     this.lastQueryTime = jsonObject.getString(LAST_QUERY_TIME);
   }
 
@@ -115,13 +123,22 @@ public class RecoveryToken implements FindToken {
     return tokenCreateTime;
   }
 
-  public long getBackupStartTimeMs() throws ParseException {
-    return DATE_FORMAT.parse(backupStartTime).getTime();
+  public long getBackupStartTimeMs() {
+    return backupStartTime;
   }
 
-  public long getBackupEndTimeMs() throws ParseException {
-    return DATE_FORMAT.parse(backupEndTime).getTime();
+  public long getBackupEndTimeMs() {
+    return backupEndTime;
   }
+
+  public String getEarliestBlob() {
+    return firstBlobId;
+  }
+
+  public String getLatestBlob() {
+    return lastBlobId;
+  }
+
   public String toString() {
     JSONObject jsonObject = new JSONObject();
     try {
@@ -134,7 +151,9 @@ public class RecoveryToken implements FindToken {
       jsonObject = new JSONObject();
     }
     jsonObject.put(COSMOS_CONTINUATION_TOKEN, this.getCosmosContinuationToken());
+    jsonObject.put(EARLIEST_BLOB, this.firstBlobId);
     jsonObject.put(BACKUP_START_TIME, backupStartTime);
+    jsonObject.put(LATEST_BLOB, this.lastBlobId);
     jsonObject.put(BACKUP_END_TIME, backupEndTime);
     jsonObject.put(END_OF_PARTITION, this.isEndOfPartitionReached());
     jsonObject.put(QUERY_NAME, this.getQueryName());
