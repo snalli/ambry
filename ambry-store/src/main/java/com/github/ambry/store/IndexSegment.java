@@ -72,7 +72,7 @@ import static com.github.ambry.store.StoreFindToken.*;
  * the memory mapped file. If the index is in memory, a normal map
  * lookup is performed to find key.
  */
-class IndexSegment implements Iterable<IndexEntry> {
+public class IndexSegment implements Iterable<IndexEntry> {
   static final String INDEX_SEGMENT_FILE_NAME_SUFFIX = "index";
   static final String BLOOM_FILE_NAME_SUFFIX = "bloom";
 
@@ -932,7 +932,7 @@ class IndexSegment implements Iterable<IndexEntry> {
    * @return true if any entries were added.
    * @throws StoreException
    */
-  boolean getIndexEntriesSince(StoreKey key, FindEntriesCondition findEntriesCondition, List<IndexEntry> entries,
+  public boolean getIndexEntriesSince(StoreKey key, FindEntriesCondition findEntriesCondition, List<IndexEntry> entries,
       AtomicLong currentTotalSizeOfEntriesInBytes, boolean oneEntryPerKey, boolean inclusive) throws StoreException {
     if (!findEntriesCondition.proceed(currentTotalSizeOfEntriesInBytes.get(), getLastModifiedTimeSecs())) {
       return false;

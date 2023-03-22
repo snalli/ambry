@@ -47,7 +47,7 @@ import static com.github.ambry.account.Container.*;
  * - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
  *
  */
-class IndexValue implements Comparable<IndexValue> {
+public class IndexValue implements Comparable<IndexValue> {
 
   enum Flags {
     Delete_Index, Ttl_Update_Index, Undelete_Index
@@ -265,7 +265,7 @@ class IndexValue implements Comparable<IndexValue> {
    * Helper function for isFlagSet(Flags.Delete_Index).
    * @return true when the Delete_Index is set.
    */
-  boolean isDelete() {
+  public boolean isDelete() {
     return isFlagSet(Flags.Delete_Index);
   }
 

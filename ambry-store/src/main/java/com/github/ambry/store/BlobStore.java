@@ -107,6 +107,10 @@ public class BlobStore implements Store {
   private AtomicBoolean isDisabled = new AtomicBoolean(false);
   protected PersistentIndex index;
 
+  public PersistentIndex getIndex() {
+    return index;
+  }
+
   /**
    * States representing the different scenarios that can occur when a set of messages are to be written to the store.
    * Nomenclature:

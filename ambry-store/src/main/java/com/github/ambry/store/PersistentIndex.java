@@ -59,7 +59,7 @@ import org.slf4j.LoggerFactory;
  * recovering an index from the log and commit and recover index to disk . This class
  * is not thread safe and expects the caller to do appropriate synchronization.
  **/
-class PersistentIndex {
+public class PersistentIndex {
 
   /**
    * Represents the different types of index entries.
@@ -122,7 +122,7 @@ class PersistentIndex {
 
   // switching the ref to this is thread safe as long as there are no modifications to IndexSegment instances whose
   // offsets are still present in the journal.
-  private volatile ConcurrentSkipListMap<Offset, IndexSegment> validIndexSegments = new ConcurrentSkipListMap<>();
+  protected volatile ConcurrentSkipListMap<Offset, IndexSegment> validIndexSegments = new ConcurrentSkipListMap<>();
   // this is used by addToIndex() and changeIndexSegments() to resolve concurrency b/w them and is not for general use.
   private volatile ConcurrentSkipListMap<Offset, IndexSegment> inFluxIndexSegments = validIndexSegments;
   private static final Logger logger = LoggerFactory.getLogger(PersistentIndex.class);
@@ -130,6 +130,10 @@ class PersistentIndex {
   private final ScheduledFuture<?> persistorTask;
   // When undelete is enabled, DELETE is not the final state of the blob, since a DELETEd blob can be UNDELTEd.
   private final boolean isDeleteFinalStateOfBlob;
+
+  public ConcurrentSkipListMap<Offset, IndexSegment> getValidIndexSegments() {
+    return validIndexSegments;
+  }
 
   // ReadWriteLock to make sure index values are always pointing to valid log segments.
   // In compaction's final steps, persistent index and log will update their internal maps to reflect the result of

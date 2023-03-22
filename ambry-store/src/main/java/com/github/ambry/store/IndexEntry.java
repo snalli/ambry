@@ -16,7 +16,7 @@ package com.github.ambry.store;
 /**
  * A key and value that represents an index entry
  */
-class IndexEntry {
+public class IndexEntry {
   private final StoreKey key;
   private final IndexValue value;
   private final Long crc;
@@ -31,11 +31,11 @@ class IndexEntry {
     this(key, value, null);
   }
 
-  StoreKey getKey() {
+  public StoreKey getKey() {
     return this.key;
   }
 
-  IndexValue getValue() {
+  public IndexValue getValue() {
     return this.value;
   }
 

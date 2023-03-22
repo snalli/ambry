@@ -36,9 +36,13 @@ public class RecoveryToken implements FindToken {
   public static final String END_OF_PARTITION = "end_of_partition_reached";
   public static final String TOKEN_CREATE_TIME = "token_create_time_gmt";
   public static final String EARLIEST_BLOB = "earliest_blob_id";
-  public static final String BACKUP_START_TIME = "earliest_blob_create_time_gmt";
+  public static final String BACKUP_START_TIME = "earliest_blob_create_time_ms";
+  public static final String BACKUP_START_TIME_GMT = "earliest_blob_create_time_gmt";
+
   public static final String LATEST_BLOB = "latest_blob_id";
-  public static final String BACKUP_END_TIME = "latest_blob_update_time_gmt";
+  public static final String BACKUP_END_TIME = "latest_blob_update_time_ms";
+  public static final String BACKUP_END_TIME_GMT = "latest_blob_update_time_gmt";
+
   public static final String LAST_QUERY_TIME = "last_query_time_gmt";
   public static final DateFormat DATE_FORMAT = new SimpleDateFormat("dd MMM yyyy HH:mm:ss:SSS");
 
@@ -153,8 +157,10 @@ public class RecoveryToken implements FindToken {
     jsonObject.put(COSMOS_CONTINUATION_TOKEN, this.getCosmosContinuationToken());
     jsonObject.put(EARLIEST_BLOB, this.firstBlobId);
     jsonObject.put(BACKUP_START_TIME, backupStartTime);
+    jsonObject.put(BACKUP_START_TIME_GMT, DATE_FORMAT.format(backupStartTime));
     jsonObject.put(LATEST_BLOB, this.lastBlobId);
     jsonObject.put(BACKUP_END_TIME, backupEndTime);
+    jsonObject.put(BACKUP_END_TIME_GMT, DATE_FORMAT.format(backupEndTime));
     jsonObject.put(END_OF_PARTITION, this.isEndOfPartitionReached());
     jsonObject.put(QUERY_NAME, this.getQueryName());
     jsonObject.put(TOKEN_CREATE_TIME, this.getTokenCreateTime());

@@ -17,7 +17,7 @@ package com.github.ambry.store;
  * constructed with one or two parameters: a max size of entries and an optional end time. A proceed method takes a size
  * and a time and returns true if the passed in parameters are within the size and time associated with the condition.
  */
-class FindEntriesCondition {
+public class FindEntriesCondition {
   private long endTime;
   private long maxSize;
 
@@ -25,7 +25,7 @@ class FindEntriesCondition {
    * object.
    * @param maxSize the maximum size of entries allowed by this condition object.
    */
-  FindEntriesCondition(long maxSize) {
+  public FindEntriesCondition(long maxSize) {
     this.maxSize = maxSize;
     this.endTime = -1;
   }
