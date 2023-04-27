@@ -15,12 +15,10 @@ package com.github.ambry.cloud;
 
 import com.azure.cosmos.ConsistencyLevel;
 import com.azure.cosmos.CosmosContainer;
-import com.azure.cosmos.CosmosException;
 import com.azure.cosmos.models.CosmosQueryRequestOptions;
 import com.azure.cosmos.models.FeedResponse;
 import com.azure.cosmos.models.PartitionKey;
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.cloud.azure.CosmosUpdateTimeFindToken;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
@@ -32,45 +30,33 @@ import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
 import com.github.ambry.messageformat.MessageSievingInputStream;
-import com.github.ambry.network.ChannelOutput;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.notification.NotificationSystem;
-import com.github.ambry.protocol.ReplicaMetadataRequest;
 import com.github.ambry.protocol.ReplicaMetadataResponse;
 import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
 import com.github.ambry.replication.BackupCheckerFileManager;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.RemoteReplicaInfo;
 import com.github.ambry.replication.ReplicaThread;
-import com.github.ambry.replication.ReplicationException;
 import com.github.ambry.replication.ReplicationManager;
 import com.github.ambry.replication.ReplicationMetrics;
 import com.github.ambry.server.ServerErrorCode;
-import com.github.ambry.store.FindInfo;
 import com.github.ambry.store.MessageInfo;
-import com.github.ambry.store.MessageInfoType;
 import com.github.ambry.store.Store;
-import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.Transformer;
-import com.github.ambry.utils.NettyByteBufDataInputStream;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.text.DateFormat;
 import java.text.ParseException;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.EnumSet;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
 import org.json.JSONObject;
@@ -293,7 +279,6 @@ public class RecoveryThread extends ReplicaThread {
     String recoveryTokenFile = String.join("/", remoteReplicaInfo.getLocalReplicaId().getMountPath(),
         String.join("_", "recovery_token", String.valueOf(remoteReplicaInfo.getLocalReplicaId().getPartitionId().getId())));
     fileManager.truncateAndWriteToFileVerbatim(recoveryTokenFile, recoveryToken.toString());
-    logReplicationStatus(remoteReplicaInfo, exchangeMetadataResponse);
   }
 
   protected String getCosmosContinuationToken(String continuationToken) {
@@ -346,17 +331,19 @@ public class RecoveryThread extends ReplicaThread {
 
   /**
    * Prints recovery progress when recovering from cloud
-   * @param remoteReplicaInfo Info about remote replica
-   * @param exchangeMetadataResponse Metadata response object
+   *
+   * @param remoteReplicaInfo           Info about remote replica
+   * @param exchangeMetadataResponse    Metadata response object
+   * @param replicaMetadataResponseInfo
    */
   @Override
   protected void logReplicationStatus(RemoteReplicaInfo remoteReplicaInfo,
-      ExchangeMetadataResponse exchangeMetadataResponse) {
+      ExchangeMetadataResponse exchangeMetadataResponse, ReplicaMetadataResponseInfo replicaMetadataResponseInfo) {
     // This will help us know when to stop recovery process
-    String text = String.format("%s | ReplicaType = %s | Token = %s | localLagFromRemoteInBytes = %s \n",
-        remoteReplicaInfo, remoteReplicaInfo.getLocalReplicaId().getReplicaType(),
-        remoteReplicaInfo.getToken().toString(),
-        exchangeMetadataResponse.localLagFromRemoteInBytes);
+    String text =
+        String.format("%s | ReplicaType = %s | Token = %s | localLagFromRemoteInBytes = %s \n", remoteReplicaInfo,
+            remoteReplicaInfo.getLocalReplicaId().getReplicaType(), remoteReplicaInfo.getToken().toString(),
+            exchangeMetadataResponse.localLagFromRemoteInBytes);
     logger.trace("|snkt|{}", text);
     // fileManager.truncateAndWriteToFile(getFilePath(remoteReplicaInfo, RECOVERY_STATUS_FILE), text);
   }

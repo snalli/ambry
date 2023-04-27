@@ -93,7 +93,6 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.function.Predicate;
-import org.checkerframework.checker.units.qual.A;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -267,23 +266,13 @@ public class AmbryServer {
       replicationManager.start();
 
       if (replicationConfig.replicationEnabledWithVcrCluster) {
-        logger.info("Creating Helix cluster spectator for cloud to store replication.");
-        vcrClusterSpectator = _vcrClusterAgentsFactory.getVcrClusterSpectator(cloudConfig, clusterMapConfig);
-        cloudToStoreReplicationManager =
-            new CloudToStoreReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager,
-                storeKeyFactory, clusterMap, scheduler, nodeId, connectionPool, registry, notificationSystem,
-                storeKeyConverterFactory, serverConfig.serverMessageTransformer, vcrClusterSpectator,
-                clusterParticipants.get(0));
-        cloudToStoreReplicationManager.start();
+        recoveryManager =
+            new RecoveryManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory,
+                clusterMap, scheduler, nodeId, connectionPool, registry, notificationSystem, storeKeyConverterFactory,
+                serverConfig.serverMessageTransformer, vcrClusterSpectator, clusterParticipants.get(0), cloudConfig,
+                azureCloudConfig);
+        recoveryManager.start();
       }
-
-      recoveryManager =
-          new RecoveryManager(replicationConfig, clusterMapConfig, storeConfig, storageManager,
-              storeKeyFactory, clusterMap, scheduler, nodeId, connectionPool, registry, notificationSystem,
-              storeKeyConverterFactory, serverConfig.serverMessageTransformer, vcrClusterSpectator,
-              clusterParticipants.get(0), cloudConfig, azureCloudConfig);
-      recoveryManager.start();
-
       logger.info("Creating StatsManager to publish stats");
 
       accountStatsMySqlStore =

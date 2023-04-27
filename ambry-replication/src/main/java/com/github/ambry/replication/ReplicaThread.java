@@ -250,11 +250,13 @@ public class ReplicaThread implements Runnable {
 
   /**
    * Logs replication progress of local node against some remote node
-   * @param remoteReplicaInfo remote replica information
-   * @param exchangeMetadataResponse metadata information from remote node
+   *
+   * @param remoteReplicaInfo           remote replica information
+   * @param exchangeMetadataResponse    metadata information from remote node
+   * @param replicaMetadataResponseInfo
    */
   protected void logReplicationStatus(RemoteReplicaInfo remoteReplicaInfo,
-      ExchangeMetadataResponse exchangeMetadataResponse) {
+      ExchangeMetadataResponse exchangeMetadataResponse, ReplicaMetadataResponseInfo replicaMetadataResponseInfo) {
     logger.trace("ReplicationStatus | {} | {} | isSealed = {} | Token = {} | localLagFromRemoteInBytes = {}",
         remoteReplicaInfo, remoteReplicaInfo.getReplicaId().getReplicaType(),
         remoteReplicaInfo.getReplicaId().isSealed(), remoteReplicaInfo.getToken().toString(),
@@ -596,10 +598,11 @@ public class ReplicaThread implements Runnable {
           || replicationDisabledPartitions.contains(replicaId.getPartitionId())) {
         logger.info(
             "|snkt| Skipping replication on replica {} because one of following conditions is true: remote replica is down "
-                + "= {}; in backoff = {}; local store is offline = {}; replication is disabled = {}.",
+                + "= {}; in backoff = {}; local store is offline = {}; replication is disabled = {}; replicatingFromRemoteColo = {}; leaderBasedReplicationAdmin = {}",
             replicaId.getPartitionId().toPathString(), replicaId.isDown(), inBackoff,
             remoteReplicaInfo.getLocalStore().getCurrentState() == ReplicaState.OFFLINE,
-            replicationDisabledPartitions.contains(replicaId.getPartitionId()));
+            replicationDisabledPartitions.contains(replicaId.getPartitionId()), replicatingFromRemoteColo,
+            leaderBasedReplicationAdmin);
         continue;
       }
 
@@ -722,7 +725,7 @@ public class ReplicaThread implements Runnable {
             }
 
             // trace replication status to track progress of recovery from cloud
-            logReplicationStatus(remoteReplicaInfo, exchangeMetadataResponse);
+            logReplicationStatus(remoteReplicaInfo, exchangeMetadataResponse, replicaMetadataResponseInfo);
 
             // There are no missing keys. We just advance the token
             if (exchangeMetadataResponse.missingStoreMessages.size() == 0) {

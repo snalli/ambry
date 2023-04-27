@@ -24,17 +24,22 @@ import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageInfoType;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
+import com.github.ambry.store.StoreFindToken;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
 import java.io.File;
-import java.nio.file.StandardOpenOption;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Collections;
@@ -42,6 +47,7 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
+import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -103,7 +109,10 @@ public class BackupCheckerThread extends ReplicaThread {
     EnumSet<MessageInfoType> acceptableLocalBlobStates = EnumSet.of(MessageInfoType.DELETE);
     EnumSet<StoreErrorCodes> acceptableStoreErrorCodes = EnumSet.noneOf(StoreErrorCodes.class);
     // Check local store once before logging an error
-    checkLocalStore(remoteBlob, remoteReplicaInfo, acceptableLocalBlobStates, acceptableStoreErrorCodes);
+    // checkLocalStore(remoteBlob, remoteReplicaInfo, acceptableLocalBlobStates, acceptableStoreErrorCodes);
+    BackupCheckerToken backupCheckerToken = getOrCreateToken(remoteReplicaInfo);
+    backupCheckerToken.incrementNumMissingDelete(1);
+    persistBackupCheckerToken(remoteReplicaInfo, backupCheckerToken);
   }
 
   /**
@@ -119,6 +128,9 @@ public class BackupCheckerThread extends ReplicaThread {
     // Check local store once before logging an error
     // TTL_UPDATE info is unavailable in azure
     // checkLocalStore(remoteBlob, remoteReplicaInfo, acceptableLocalBlobStates, acceptableStoreErrorCodes);
+    BackupCheckerToken backupCheckerToken = getOrCreateToken(remoteReplicaInfo);
+    backupCheckerToken.incrementNumMissingTtlUpdate(1);
+    persistBackupCheckerToken(remoteReplicaInfo, backupCheckerToken);
   }
 
   /**
@@ -134,6 +146,9 @@ public class BackupCheckerThread extends ReplicaThread {
     // Check local store once before logging an error
     // Undelete info is unavailable in azure
     // checkLocalStore(remoteBlob, remoteReplicaInfo, acceptableLocalBlobStates, acceptableStoreErrorCodes);
+    // BackupCheckerToken backupCheckerToken = getOrCreateToken(remoteReplicaInfo);
+    // backupCheckerToken.incrementNumMissingUndelete(1);
+    // persistBackupCheckerToken(remoteReplicaInfo, backupCheckerToken);
   }
 
   /**
@@ -172,11 +187,17 @@ public class BackupCheckerThread extends ReplicaThread {
     for (int i = 0; i < exchangeMetadataResponseList.size(); i++) {
       ExchangeMetadataResponse exchangeMetadataResponse = exchangeMetadataResponseList.get(i);
       RemoteReplicaInfo remoteReplicaInfo = replicasToReplicatePerNode.get(i);
+      // BackupCheckerToken backupCheckerToken = getOrCreateToken(remoteReplicaInfo);
+      // long numMissingPut = 0;
       if (exchangeMetadataResponse.serverErrorCode == ServerErrorCode.No_Error) {
-        for (MessageInfo messageInfo: exchangeMetadataResponse.getMissingStoreMessages()) {
+        for (MessageInfo messageInfo : exchangeMetadataResponse.getMissingStoreMessages()) {
           // Check local store once before logging an error
-          checkLocalStore(messageInfo, replicasToReplicatePerNode.get(0), acceptableLocalBlobStates, acceptableStoreErrorCodes);
+          checkLocalStore(messageInfo, replicasToReplicatePerNode.get(0), acceptableLocalBlobStates,
+              acceptableStoreErrorCodes);
+          // numMissingPut += 1;
         }
+        // backupCheckerToken.incrementNumMissingPut(numMissingPut);
+        // persistBackupCheckerToken(remoteReplicaInfo, backupCheckerToken);
         // Advance token so that we make progress in spite of missing keys,
         // else the replication code will be stuck waiting for missing keys to appear in local store.
         advanceToken(remoteReplicaInfo, exchangeMetadataResponse);
@@ -194,7 +215,6 @@ public class BackupCheckerThread extends ReplicaThread {
     remoteReplicaInfo.setLocalLagFromRemoteInBytes(exchangeMetadataResponse.localLagFromRemoteInBytes);
     // reset stored metadata response for this replica so that we send next request for metadata
     remoteReplicaInfo.setExchangeMetadataResponse(new ExchangeMetadataResponse(ServerErrorCode.No_Error));
-    logReplicationStatus(remoteReplicaInfo, exchangeMetadataResponse);
   }
 
   /**
@@ -254,19 +274,54 @@ public class BackupCheckerThread extends ReplicaThread {
     return messageInfoTypes;
   }
 
+  BackupCheckerToken getOrCreateToken(RemoteReplicaInfo remoteReplicaInfo) {
+    String backupCheckerTokenFile = getFilePath(remoteReplicaInfo, REPLICA_STATUS_FILE);
+    Path backupCheckerTokenFilePath = Paths.get(backupCheckerTokenFile);
+    BackupCheckerToken currBackupCheckerToken;
+    try {
+      if (Files.exists(backupCheckerTokenFilePath)) {
+        currBackupCheckerToken =
+            new BackupCheckerToken(new JSONObject(Utils.readStringFromFile(backupCheckerTokenFile)));
+      } else {
+        currBackupCheckerToken = new BackupCheckerToken(remoteReplicaInfo.getReplicaId().getPartitionId().getId(),
+            remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname(),
+            remoteReplicaInfo.getReplicaId().getReplicaPath(), remoteReplicaInfo.getToken().toString(), 0, 0, 0, 0, 0,
+            0);
+      }
+    } catch (IOException e) {
+      logger.error("Failed to create or open file {} due to {}", backupCheckerTokenFile, e);
+      throw new RuntimeException(e);
+    }
+    return currBackupCheckerToken;
+  }
+
+  void persistBackupCheckerToken(RemoteReplicaInfo remoteReplicaInfo, BackupCheckerToken currBackupCheckerToken) {
+    String backupCheckerTokenFile = getFilePath(remoteReplicaInfo, REPLICA_STATUS_FILE);
+    currBackupCheckerToken.setAmbryToken(remoteReplicaInfo.getToken().toString());
+    fileManager.truncateAndWriteToFileVerbatim(backupCheckerTokenFile, currBackupCheckerToken.toString());
+  }
+
   /**
    * Prints a log if local store has caught up with remote store
-   * @param remoteReplicaInfo Info about remote replica
-   * @param exchangeMetadataResponse Metadata response object
+   *
+   * @param remoteReplicaInfo           Info about remote replica
+   * @param exchangeMetadataResponse    Metadata response object
+   * @param replicaMetadataResponseInfo
    */
   @Override
   protected void logReplicationStatus(RemoteReplicaInfo remoteReplicaInfo,
-      ExchangeMetadataResponse exchangeMetadataResponse) {
+      ExchangeMetadataResponse exchangeMetadataResponse, ReplicaMetadataResponseInfo replicaMetadataResponseInfo) {
     // This will help us know when to stop DR process for sealed partitions
-    String text = String.format("%s | isSealed = %s | Token = %s | localLagFromRemoteInBytes = %s \n",
-        remoteReplicaInfo, remoteReplicaInfo.getReplicaId().isSealed(), remoteReplicaInfo.getToken().toString(),
-        exchangeMetadataResponse.localLagFromRemoteInBytes);
-    fileManager.truncateAndWriteToFile(getFilePath(remoteReplicaInfo, REPLICA_STATUS_FILE), text);
+    BackupCheckerToken currBackupCheckerToken = getOrCreateToken(remoteReplicaInfo);
+    currBackupCheckerToken.incrementNumBlobsReplicated(replicaMetadataResponseInfo.getMessageInfoList().size());
+    currBackupCheckerToken.setLagInBytes(exchangeMetadataResponse.localLagFromRemoteInBytes);
+    StoreFindToken storeFindToken = (StoreFindToken) remoteReplicaInfo.getToken();
+    for (MessageInfo messageInfo : replicaMetadataResponseInfo.getMessageInfoList()) {
+      fileManager.appendToFile(getFilePath(remoteReplicaInfo, "all_keys"),
+          String.format("%s | %s\n", messageInfo.getStoreKey(), storeFindToken.getOffset()));
+    }
+    // I need these metrics to drive the OKR. Storing them in existing classes and objects requires code-reviews.
+    persistBackupCheckerToken(remoteReplicaInfo, currBackupCheckerToken);
   }
 
   /**

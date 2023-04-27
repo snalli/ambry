@@ -15,10 +15,8 @@ package com.github.ambry.cloud;
 
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenType;
-import com.github.ambry.utils.SystemTime;
 import java.lang.reflect.Field;
 import java.text.DateFormat;
-import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.LinkedHashMap;
 import org.json.JSONObject;
