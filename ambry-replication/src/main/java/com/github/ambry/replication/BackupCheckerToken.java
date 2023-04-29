@@ -20,17 +20,21 @@ public class BackupCheckerToken {
   public static final String NUM_MISSING_PUT = "num_missing_put";
   public static final String NUM_MISSING_TTL_UPDATE = "num_missing_ttl_update";
   public static final String NUM_MISSING_UNDELETE = "num_missing_undelete";
+  public static final String NUM_KEYS_IN_PEER_NOT_IN_COSMOS = "num_keys_in_peer_not_in_cosmos";
+  public static final String NUM_KEYS_IN_COSMOS_NOT_IN_PEER = "num_keys_in_cosmos_not_in_peer";
 
-  private long partitionId = 0;
-  private String datanodeId = null;
-  private String replicaPath = null;
-  private String ambryReplicationToken = null;
-  private long lagInBytes;
-  private long numBlobsReplicated;
-  private long numMissingDelete;
-  private long numMissingPut;
-  private long numMissingTtlUpdate;
-  private long numMissingUndelete;
+  protected long partitionId = 0;
+  protected String datanodeId = null;
+  protected String replicaPath = null;
+  protected String ambryReplicationToken = null;
+  protected long lagInBytes;
+  protected long numBlobsReplicated;
+  protected long numMissingDelete;
+  protected long numMissingPut;
+  protected long numMissingTtlUpdate;
+  protected long numMissingUndelete;
+  protected long numKeysInPeerNotInCosmos;
+  protected long numKeysInCosmosNotInPeer;
 
   public BackupCheckerToken(long id, String hostname, String replicaPath, String ambryReplicationToken, long lagInBytes,
       long numBlobsReplicated, long numMissingDelete, long numMissingPut, long numMissingTtlUpdate,
@@ -57,10 +61,27 @@ public class BackupCheckerToken {
     this.numMissingPut = jsonObject.getLong(NUM_MISSING_PUT);
     this.numMissingTtlUpdate = jsonObject.getLong(NUM_MISSING_TTL_UPDATE);
     this.numMissingUndelete = jsonObject.getLong(NUM_MISSING_UNDELETE);
+    this.numKeysInPeerNotInCosmos = jsonObject.getLong(NUM_KEYS_IN_PEER_NOT_IN_COSMOS);
+    this.numKeysInCosmosNotInPeer = jsonObject.getLong(NUM_KEYS_IN_COSMOS_NOT_IN_PEER);
   }
 
   public long getNumBlobsReplicated() {
     return numBlobsReplicated;
+  }
+
+  public long setNumKeysInPeerNotInCosmos(long num) {
+    this.numKeysInPeerNotInCosmos = num;
+    return numKeysInPeerNotInCosmos;
+  }
+
+  public long setNumKeysInCosmosNotInPeer(long num) {
+    this.numKeysInCosmosNotInPeer = num;
+    return numKeysInCosmosNotInPeer;
+  }
+
+  public long setNumBlobsReplicated(long num) {
+    this.numBlobsReplicated = num;
+    return this.numBlobsReplicated;
   }
 
   public long incrementNumBlobsReplicated(long inc) {
@@ -97,7 +118,7 @@ public class BackupCheckerToken {
     this.ambryReplicationToken = ambryReplicationToken;
     return ambryReplicationToken;
   }
-  
+
   public String toString() {
     JSONObject jsonObject = new JSONObject();
     try {
@@ -119,6 +140,8 @@ public class BackupCheckerToken {
     jsonObject.put(NUM_MISSING_PUT, this.numMissingPut);
     jsonObject.put(NUM_MISSING_TTL_UPDATE, this.numMissingTtlUpdate);
     jsonObject.put(NUM_MISSING_UNDELETE, this.numMissingUndelete);
+    jsonObject.put(NUM_KEYS_IN_PEER_NOT_IN_COSMOS, this.numKeysInPeerNotInCosmos);
+    jsonObject.put(NUM_KEYS_IN_COSMOS_NOT_IN_PEER, this.numKeysInCosmosNotInPeer);
     return jsonObject.toString(4);
   }
 }

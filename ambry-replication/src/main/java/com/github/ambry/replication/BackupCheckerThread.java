@@ -30,7 +30,6 @@ import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageInfoType;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
-import com.github.ambry.store.StoreFindToken;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.Time;
@@ -44,9 +43,12 @@ import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -76,13 +78,23 @@ public class BackupCheckerThread extends ReplicaThread {
 
   public static final DateFormat DATE_FORMAT = new SimpleDateFormat("dd MMM yyyy HH:mm:ss:SSS");
 
+  protected Set<String> keysInPeerServer;
+
+  enum ReplicationStatus {
+    NotStarted, InProgress, Completed, Stats
+  }
+
+  protected ReplicationStatus replicationStatus = ReplicationStatus.NotStarted;
+  protected BackupCheckerManager backupCheckerManager = null;
+
   public BackupCheckerThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
-      AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, ConnectionPool connectionPool, NetworkClient networkClient,
-      ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics, NotificationSystem notification,
-      StoreKeyConverter storeKeyConverter, Transformer transformer, MetricRegistry metricRegistry,
-      boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler, Time time,
-      ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
-      ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin) {
+      AtomicInteger correlationIdGenerator, DataNodeId dataNodeId, ConnectionPool connectionPool,
+      NetworkClient networkClient, ReplicationConfig replicationConfig, ReplicationMetrics replicationMetrics,
+      NotificationSystem notification, StoreKeyConverter storeKeyConverter, Transformer transformer,
+      MetricRegistry metricRegistry, boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler,
+      Time time, ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
+      ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin,
+      BackupCheckerManager backupCheckerManager) {
     super(threadName, findTokenHelper, clusterMap, correlationIdGenerator, dataNodeId, connectionPool, networkClient,
         replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry,
         replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate,
@@ -94,6 +106,8 @@ public class BackupCheckerThread extends ReplicaThread {
       throw new RuntimeException(e);
     }
     this.replicationConfig = replicationConfig;
+    this.keysInPeerServer = new HashSet<>();
+    this.backupCheckerManager = backupCheckerManager;
     logger.info("Created BackupCheckerThread {}", threadName);
   }
 
@@ -110,9 +124,9 @@ public class BackupCheckerThread extends ReplicaThread {
     EnumSet<StoreErrorCodes> acceptableStoreErrorCodes = EnumSet.noneOf(StoreErrorCodes.class);
     // Check local store once before logging an error
     // checkLocalStore(remoteBlob, remoteReplicaInfo, acceptableLocalBlobStates, acceptableStoreErrorCodes);
-    BackupCheckerToken backupCheckerToken = getOrCreateToken(remoteReplicaInfo);
-    backupCheckerToken.incrementNumMissingDelete(1);
-    persistBackupCheckerToken(remoteReplicaInfo, backupCheckerToken);
+    // BackupCheckerToken backupCheckerToken = getOrCreateToken(remoteReplicaInfo);
+    // backupCheckerToken.incrementNumMissingDelete(1);
+    // persistBackupCheckerToken(remoteReplicaInfo, backupCheckerToken);
   }
 
   /**
@@ -128,9 +142,9 @@ public class BackupCheckerThread extends ReplicaThread {
     // Check local store once before logging an error
     // TTL_UPDATE info is unavailable in azure
     // checkLocalStore(remoteBlob, remoteReplicaInfo, acceptableLocalBlobStates, acceptableStoreErrorCodes);
-    BackupCheckerToken backupCheckerToken = getOrCreateToken(remoteReplicaInfo);
-    backupCheckerToken.incrementNumMissingTtlUpdate(1);
-    persistBackupCheckerToken(remoteReplicaInfo, backupCheckerToken);
+    // BackupCheckerToken backupCheckerToken = getOrCreateToken(remoteReplicaInfo);
+    // backupCheckerToken.incrementNumMissingTtlUpdate(1);
+    // persistBackupCheckerToken(remoteReplicaInfo, backupCheckerToken);
   }
 
   /**
@@ -311,17 +325,40 @@ public class BackupCheckerThread extends ReplicaThread {
   @Override
   protected void logReplicationStatus(RemoteReplicaInfo remoteReplicaInfo,
       ExchangeMetadataResponse exchangeMetadataResponse, ReplicaMetadataResponseInfo replicaMetadataResponseInfo) {
-    // This will help us know when to stop DR process for sealed partitions
-    BackupCheckerToken currBackupCheckerToken = getOrCreateToken(remoteReplicaInfo);
-    currBackupCheckerToken.incrementNumBlobsReplicated(replicaMetadataResponseInfo.getMessageInfoList().size());
-    currBackupCheckerToken.setLagInBytes(exchangeMetadataResponse.localLagFromRemoteInBytes);
-    StoreFindToken storeFindToken = (StoreFindToken) remoteReplicaInfo.getToken();
-    for (MessageInfo messageInfo : replicaMetadataResponseInfo.getMessageInfoList()) {
-      fileManager.appendToFile(getFilePath(remoteReplicaInfo, "all_keys"),
-          String.format("%s | %s\n", messageInfo.getStoreKey(), storeFindToken.getOffset()));
+    BackupCheckerToken currBackupCheckerToken;
+    switch (this.replicationStatus) {
+      case NotStarted:
+        this.replicationStatus = ReplicationStatus.InProgress;
+        break;
+
+      case InProgress:
+        currBackupCheckerToken = getOrCreateToken(remoteReplicaInfo);
+        currBackupCheckerToken.setLagInBytes(exchangeMetadataResponse.localLagFromRemoteInBytes);
+        replicaMetadataResponseInfo.getMessageInfoList().forEach(m -> keysInPeerServer.add(m.getStoreKey().toString()));
+        currBackupCheckerToken.setNumBlobsReplicated(keysInPeerServer.size());
+        persistBackupCheckerToken(remoteReplicaInfo, currBackupCheckerToken);
+        if (exchangeMetadataResponse.localLagFromRemoteInBytes == 0) {
+          this.replicationStatus = ReplicationStatus.Completed;
+        }
+        break;
+
+      case Completed:
+        currBackupCheckerToken = getOrCreateToken(remoteReplicaInfo);
+        Set<String> keysInCosmos = this.backupCheckerManager.getKeysForPartition(
+            String.valueOf(remoteReplicaInfo.getReplicaId().getPartitionId().getId()));
+        Set<String> keysInPeerNotInCosmos =
+            keysInPeerServer.stream().filter(k -> !keysInCosmos.contains(k)).collect(Collectors.toSet());
+        Set<String> keysInCosmosNotInPeer =
+            keysInCosmos.stream().filter(k -> !keysInPeerServer.contains(k)).collect(Collectors.toSet());
+        currBackupCheckerToken.setNumKeysInPeerNotInCosmos(keysInPeerNotInCosmos.size());
+        currBackupCheckerToken.setNumKeysInCosmosNotInPeer(keysInCosmosNotInPeer.size());
+        persistBackupCheckerToken(remoteReplicaInfo, currBackupCheckerToken);
+        this.replicationStatus = ReplicationStatus.Stats;
+        break;
+
+      case Stats:
+      default:
     }
-    // I need these metrics to drive the OKR. Storing them in existing classes and objects requires code-reviews.
-    persistBackupCheckerToken(remoteReplicaInfo, currBackupCheckerToken);
   }
 
   /**

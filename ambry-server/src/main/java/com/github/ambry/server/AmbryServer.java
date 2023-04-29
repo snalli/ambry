@@ -64,6 +64,7 @@ import com.github.ambry.network.http2.Http2ServerMetrics;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.AmbryRequests;
 import com.github.ambry.protocol.RequestHandlerPool;
+import com.github.ambry.replication.BackupCheckerManager;
 import com.github.ambry.replication.CloudToStoreReplicationManager;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.ReplicationManager;
@@ -259,11 +260,24 @@ public class AmbryServer {
           Utils.getObj(serverConfig.serverStoreKeyConverterFactory, properties, registry);
 
       Predicate<MessageInfo> skipPredicate = new ReplicationSkipPredicate(accountService, replicationConfig);
-      replicationManager =
-          new ReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory,
-              clusterMap, scheduler, nodeId, connectionPool, networkClientFactory, registry, notificationSystem, storeKeyConverterFactory,
-              serverConfig.serverMessageTransformer, clusterParticipants.get(0), skipPredicate);
-      replicationManager.start();
+      switch (replicationConfig.replicationThreadType) {
+        case ReplicationConfig.BACKUP_CHECKER_THREAD:
+          replicationManager =
+              new BackupCheckerManager(replicationConfig, clusterMapConfig, storeConfig, storageManager,
+                  storeKeyFactory, clusterMap, scheduler, nodeId, connectionPool, networkClientFactory, registry,
+                  notificationSystem, storeKeyConverterFactory, serverConfig.serverMessageTransformer,
+                  clusterParticipants.get(0), skipPredicate);
+          replicationManager.start();
+          logger.info("|snkt| Created BackupCheckerManager");
+          break;
+        case ReplicationConfig.DEFAULT_REPLICATION_THREAD:
+          replicationManager =
+              new ReplicationManager(replicationConfig, clusterMapConfig, storeConfig, storageManager, storeKeyFactory,
+                  clusterMap, scheduler, nodeId, connectionPool, networkClientFactory, registry, notificationSystem,
+                  storeKeyConverterFactory, serverConfig.serverMessageTransformer, clusterParticipants.get(0),
+                  skipPredicate);
+          replicationManager.start();
+      }
 
       if (replicationConfig.replicationEnabledWithVcrCluster) {
         recoveryManager =

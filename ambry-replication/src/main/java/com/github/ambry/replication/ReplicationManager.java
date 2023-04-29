@@ -128,19 +128,10 @@ public class ReplicationManager extends ReplicationEngine {
       MetricRegistry metricRegistry, boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler,
       Time time, ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
       ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin) {
-    switch(replicationConfig.replicationThreadType) {
-      case ReplicationConfig.BACKUP_CHECKER_THREAD:
-        return new BackupCheckerThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId,
-            connectionPool, networkClient, replicationConfig, replicationMetrics, notification,
-            storeKeyConverter, transformer, metricRegistry, replicatingOverSsl, datacenterName,
-            responseHandler, time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
-      case ReplicationConfig.DEFAULT_REPLICATION_THREAD:
-      default:
-        return new ReplicaThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId,
-            connectionPool, networkClient, replicationConfig, replicationMetrics, notification,
-            storeKeyConverter, transformer, metricRegistry, replicatingOverSsl, datacenterName,
-            responseHandler, time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin);
-    }
+    return new ReplicaThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId, connectionPool,
+        networkClient, replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer,
+        metricRegistry, replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate,
+        leaderBasedReplicationAdmin);
   }
 
   @Override
