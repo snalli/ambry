@@ -179,21 +179,24 @@ public class RecoveryThread extends ReplicaThread {
         for (FeedResponse<CloudBlobMetadata> page : cloudBlobMetadataIter) {
           requestCharge += page.getRequestCharge();
           for (CloudBlobMetadata cloudBlobMetadata : page.getResults()) {
-            messageEntries.add(getMessageInfoFromMetadata(cloudBlobMetadata));
+            MessageInfo messageInfo = getMessageInfoFromMetadata(cloudBlobMetadata);
+            messageEntries.add(messageInfo);
             totalBlobBytesRead += cloudBlobMetadata.getSize();
             if (backupStartTime == -1 || (cloudBlobMetadata.getCreationTime() < backupStartTime)) {
               backupStartTime = cloudBlobMetadata.getCreationTime();
               firstBlobId = cloudBlobMetadata.getId();
             }
-            if (backupEndTime == -1 || (backupEndTime < cloudBlobMetadata.getLastUpdateTime()*1000)) {
-              backupEndTime = cloudBlobMetadata.getLastUpdateTime()*1000;
+            if (backupEndTime == -1 || (backupEndTime < cloudBlobMetadata.getLastUpdateTime() * 1000)) {
+              backupEndTime = cloudBlobMetadata.getLastUpdateTime() * 1000;
               lastBlobId = cloudBlobMetadata.getId();
             }
-            ++numItems;
+            numItems += !(messageInfo.isDeleted() || messageInfo.isExpired()) ? 1 : 0;
           }
-          if (numItems != page.getResults().size()) {
-            logger.error("|snkt| Item count mismatch numItems = {}, page.size = {}, prev_token = {}", numItems, page.getResults().size(), currRecoveryToken.getCosmosContinuationToken());
-          }
+          /**
+           if (numItems != page.getResults().size()) {
+           logger.error("|snkt| Item count mismatch numItems = {}, page.size = {}, prev_token = {}", numItems, page.getResults().size(), currRecoveryToken.getCosmosContinuationToken());
+           }
+           */
           String nextCosmosContinuationToken = getCosmosContinuationToken(page.getContinuationToken());
           nextRecoveryToken = new RecoveryToken(queryName,
               nextCosmosContinuationToken == null ? currRecoveryToken.getCosmosContinuationToken() : page.getContinuationToken(),

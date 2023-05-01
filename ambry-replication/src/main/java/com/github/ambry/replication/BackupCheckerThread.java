@@ -26,10 +26,12 @@ import com.github.ambry.network.NetworkClient;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
 import com.github.ambry.server.ServerErrorCode;
+import com.github.ambry.store.IndexEntry;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.MessageInfoType;
 import com.github.ambry.store.StoreErrorCodes;
 import com.github.ambry.store.StoreException;
+import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.Time;
@@ -43,6 +45,7 @@ import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -78,13 +81,14 @@ public class BackupCheckerThread extends ReplicaThread {
 
   public static final DateFormat DATE_FORMAT = new SimpleDateFormat("dd MMM yyyy HH:mm:ss:SSS");
 
-  protected Set<String> keysInPeerServer;
+  protected HashMap<String, Set<String>> keysInPeerServerHashMap;
+  protected HashMap<String, Set<String>> keysDeletedOrExpiredInPeerServerHashMap;
+  protected HashMap<String, ReplicationStatus> replicationStatusHashMap;
 
   enum ReplicationStatus {
     NotStarted, InProgress, Completed, Stats
   }
 
-  protected ReplicationStatus replicationStatus = ReplicationStatus.NotStarted;
   protected BackupCheckerManager backupCheckerManager = null;
 
   public BackupCheckerThread(String threadName, FindTokenHelper findTokenHelper, ClusterMap clusterMap,
@@ -106,7 +110,9 @@ public class BackupCheckerThread extends ReplicaThread {
       throw new RuntimeException(e);
     }
     this.replicationConfig = replicationConfig;
-    this.keysInPeerServer = new HashSet<>();
+    this.keysInPeerServerHashMap = new HashMap<>();
+    this.keysDeletedOrExpiredInPeerServerHashMap = new HashMap<>();
+    this.replicationStatusHashMap = new HashMap<>();
     this.backupCheckerManager = backupCheckerManager;
     logger.info("Created BackupCheckerThread {}", threadName);
   }
@@ -124,9 +130,9 @@ public class BackupCheckerThread extends ReplicaThread {
     EnumSet<StoreErrorCodes> acceptableStoreErrorCodes = EnumSet.noneOf(StoreErrorCodes.class);
     // Check local store once before logging an error
     // checkLocalStore(remoteBlob, remoteReplicaInfo, acceptableLocalBlobStates, acceptableStoreErrorCodes);
-    // BackupCheckerToken backupCheckerToken = getOrCreateToken(remoteReplicaInfo);
-    // backupCheckerToken.incrementNumMissingDelete(1);
-    // persistBackupCheckerToken(remoteReplicaInfo, backupCheckerToken);
+    BackupCheckerToken backupCheckerToken = getOrCreateToken(remoteReplicaInfo);
+    backupCheckerToken.incrementNumMissingDelete(1);
+    persistBackupCheckerToken(remoteReplicaInfo, backupCheckerToken);
   }
 
   /**
@@ -142,9 +148,9 @@ public class BackupCheckerThread extends ReplicaThread {
     // Check local store once before logging an error
     // TTL_UPDATE info is unavailable in azure
     // checkLocalStore(remoteBlob, remoteReplicaInfo, acceptableLocalBlobStates, acceptableStoreErrorCodes);
-    // BackupCheckerToken backupCheckerToken = getOrCreateToken(remoteReplicaInfo);
-    // backupCheckerToken.incrementNumMissingTtlUpdate(1);
-    // persistBackupCheckerToken(remoteReplicaInfo, backupCheckerToken);
+    BackupCheckerToken backupCheckerToken = getOrCreateToken(remoteReplicaInfo);
+    backupCheckerToken.incrementNumMissingTtlUpdate(1);
+    persistBackupCheckerToken(remoteReplicaInfo, backupCheckerToken);
   }
 
   /**
@@ -160,9 +166,9 @@ public class BackupCheckerThread extends ReplicaThread {
     // Check local store once before logging an error
     // Undelete info is unavailable in azure
     // checkLocalStore(remoteBlob, remoteReplicaInfo, acceptableLocalBlobStates, acceptableStoreErrorCodes);
-    // BackupCheckerToken backupCheckerToken = getOrCreateToken(remoteReplicaInfo);
-    // backupCheckerToken.incrementNumMissingUndelete(1);
-    // persistBackupCheckerToken(remoteReplicaInfo, backupCheckerToken);
+    BackupCheckerToken backupCheckerToken = getOrCreateToken(remoteReplicaInfo);
+    backupCheckerToken.incrementNumMissingUndelete(1);
+    persistBackupCheckerToken(remoteReplicaInfo, backupCheckerToken);
   }
 
   /**
@@ -201,17 +207,17 @@ public class BackupCheckerThread extends ReplicaThread {
     for (int i = 0; i < exchangeMetadataResponseList.size(); i++) {
       ExchangeMetadataResponse exchangeMetadataResponse = exchangeMetadataResponseList.get(i);
       RemoteReplicaInfo remoteReplicaInfo = replicasToReplicatePerNode.get(i);
-      // BackupCheckerToken backupCheckerToken = getOrCreateToken(remoteReplicaInfo);
-      // long numMissingPut = 0;
+      BackupCheckerToken backupCheckerToken = getOrCreateToken(remoteReplicaInfo);
+      long numMissingPut = 0;
       if (exchangeMetadataResponse.serverErrorCode == ServerErrorCode.No_Error) {
         for (MessageInfo messageInfo : exchangeMetadataResponse.getMissingStoreMessages()) {
           // Check local store once before logging an error
           checkLocalStore(messageInfo, replicasToReplicatePerNode.get(0), acceptableLocalBlobStates,
               acceptableStoreErrorCodes);
-          // numMissingPut += 1;
+          numMissingPut += 1;
         }
-        // backupCheckerToken.incrementNumMissingPut(numMissingPut);
-        // persistBackupCheckerToken(remoteReplicaInfo, backupCheckerToken);
+        backupCheckerToken.incrementNumMissingPut(numMissingPut);
+        persistBackupCheckerToken(remoteReplicaInfo, backupCheckerToken);
         // Advance token so that we make progress in spite of missing keys,
         // else the replication code will be stuck waiting for missing keys to appear in local store.
         advanceToken(remoteReplicaInfo, exchangeMetadataResponse);
@@ -326,34 +332,80 @@ public class BackupCheckerThread extends ReplicaThread {
   protected void logReplicationStatus(RemoteReplicaInfo remoteReplicaInfo,
       ExchangeMetadataResponse exchangeMetadataResponse, ReplicaMetadataResponseInfo replicaMetadataResponseInfo) {
     BackupCheckerToken currBackupCheckerToken;
-    switch (this.replicationStatus) {
+    String partitionId = remoteReplicaInfo.getReplicaId().getPartitionId().toString();
+    if (!this.replicationStatusHashMap.containsKey(partitionId)) {
+      this.replicationStatusHashMap.put(partitionId, ReplicationStatus.NotStarted);
+    }
+    if (!this.keysInPeerServerHashMap.containsKey(partitionId)) {
+      keysInPeerServerHashMap.put(partitionId, new HashSet<>());
+    }
+    if (!this.keysDeletedOrExpiredInPeerServerHashMap.containsKey(partitionId)) {
+      keysDeletedOrExpiredInPeerServerHashMap.put(partitionId, new HashSet<>());
+    }
+
+    switch (this.replicationStatusHashMap.get(partitionId)) {
       case NotStarted:
-        this.replicationStatus = ReplicationStatus.InProgress;
+        this.replicationStatusHashMap.put(partitionId, ReplicationStatus.InProgress);
         break;
 
       case InProgress:
         currBackupCheckerToken = getOrCreateToken(remoteReplicaInfo);
         currBackupCheckerToken.setLagInBytes(exchangeMetadataResponse.localLagFromRemoteInBytes);
-        replicaMetadataResponseInfo.getMessageInfoList().forEach(m -> keysInPeerServer.add(m.getStoreKey().toString()));
-        currBackupCheckerToken.setNumBlobsReplicated(keysInPeerServer.size());
+        for (MessageInfo messageInfo : replicaMetadataResponseInfo.getMessageInfoList()) {
+          if (!(messageInfo.isDeleted() || messageInfo.isExpired())) {
+            keysInPeerServerHashMap.get(partitionId).add(messageInfo.getStoreKey().toString());
+          } else {
+            keysDeletedOrExpiredInPeerServerHashMap.get(partitionId).add(messageInfo.getStoreKey().toString());
+          }
+        }
+        currBackupCheckerToken.setNumKeysInPeer(keysInPeerServerHashMap.get(partitionId).size());
+        currBackupCheckerToken.setNumKeysInPeerDeletedOrExpired(
+            keysDeletedOrExpiredInPeerServerHashMap.get(partitionId).size());
         persistBackupCheckerToken(remoteReplicaInfo, currBackupCheckerToken);
         if (exchangeMetadataResponse.localLagFromRemoteInBytes == 0) {
-          this.replicationStatus = ReplicationStatus.Completed;
+          this.replicationStatusHashMap.put(partitionId, ReplicationStatus.Completed);
         }
         break;
 
       case Completed:
         currBackupCheckerToken = getOrCreateToken(remoteReplicaInfo);
-        Set<String> keysInCosmos = this.backupCheckerManager.getKeysForPartition(
+        HashMap<StoreKey, IndexEntry> indexEntriesInCosmos = this.backupCheckerManager.getIndexEntriesForPartition(
             String.valueOf(remoteReplicaInfo.getReplicaId().getPartitionId().getId()));
-        Set<String> keysInPeerNotInCosmos =
-            keysInPeerServer.stream().filter(k -> !keysInCosmos.contains(k)).collect(Collectors.toSet());
-        Set<String> keysInCosmosNotInPeer =
-            keysInCosmos.stream().filter(k -> !keysInPeerServer.contains(k)).collect(Collectors.toSet());
+        Set<String> keysInCosmos =
+            indexEntriesInCosmos.keySet().stream().map(k -> k.toString()).collect(Collectors.toSet());
+        Set<String> keysInPeerNotInCosmos = keysInPeerServerHashMap.get(partitionId)
+            .stream()
+            .filter(k -> !keysInCosmos.contains(k))
+            .collect(Collectors.toSet());
+        Set<StoreKey> storeKeysInCosmosNotInPeer = indexEntriesInCosmos.keySet()
+            .stream()
+            .filter(k -> !keysInPeerServerHashMap.get(partitionId).contains(k.getID())
+                && !keysDeletedOrExpiredInPeerServerHashMap.get(partitionId).contains(k.getID()))
+            .collect(Collectors.toSet());
+        long numBytesInCosmosNotInPeer = 0;
+        for (StoreKey storeKey : storeKeysInCosmosNotInPeer) {
+          MessageInfo localBlob;
+          try {
+            localBlob = remoteReplicaInfo.getLocalStore().findKey(storeKey);
+          } catch (StoreException e) {
+            throw new RuntimeException(e);
+          }
+          numBytesInCosmosNotInPeer += localBlob.getSize();
+        }
+        currBackupCheckerToken.setNumKeysInCosmos(keysInCosmos.size());
         currBackupCheckerToken.setNumKeysInPeerNotInCosmos(keysInPeerNotInCosmos.size());
-        currBackupCheckerToken.setNumKeysInCosmosNotInPeer(keysInCosmosNotInPeer.size());
+        currBackupCheckerToken.setNumKeysInCosmosNotInPeer(storeKeysInCosmosNotInPeer.size());
+        currBackupCheckerToken.setNumBytesInCosmosNotInPeer(numBytesInCosmosNotInPeer);
         persistBackupCheckerToken(remoteReplicaInfo, currBackupCheckerToken);
-        this.replicationStatus = ReplicationStatus.Stats;
+        String keysInCosmosNotInPeerFile = getFilePath(remoteReplicaInfo, "keysInCosmosNotInPeer");
+        String keysInPeerNotInCosmosFile = getFilePath(remoteReplicaInfo, "keysInPeerNotInCosmos");
+        for (String key : keysInPeerNotInCosmos) {
+          fileManager.appendToFile(keysInPeerNotInCosmosFile, key + "\n");
+        }
+        for (StoreKey storeKey : storeKeysInCosmosNotInPeer) {
+          fileManager.appendToFile(keysInCosmosNotInPeerFile, storeKey.getID().toString() + "\n");
+        }
+        this.replicationStatusHashMap.put(partitionId, ReplicationStatus.Stats);
         break;
 
       case Stats:

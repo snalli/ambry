@@ -596,7 +596,7 @@ public class ReplicaThread implements Runnable {
       boolean inBackoff = time.milliseconds() < remoteReplicaInfo.getReEnableReplicationTime();
       if (replicaId.isDown() || inBackoff || remoteReplicaInfo.getLocalStore().getCurrentState() == ReplicaState.OFFLINE
           || replicationDisabledPartitions.contains(replicaId.getPartitionId())) {
-        logger.info(
+        logger.trace(
             "|snkt| Skipping replication on replica {} because one of following conditions is true: remote replica is down "
                 + "= {}; in backoff = {}; local store is offline = {}; replication is disabled = {}; replicatingFromRemoteColo = {}; leaderBasedReplicationAdmin = {}",
             replicaId.getPartitionId().toPathString(), replicaId.isDown(), inBackoff,

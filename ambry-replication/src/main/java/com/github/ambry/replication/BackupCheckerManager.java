@@ -94,6 +94,10 @@ public class BackupCheckerManager extends ReplicationManager {
     return inMemoryIndex.get(partitionName).keySet().stream().map(k -> k.toString()).collect(Collectors.toSet());
   }
 
+  public HashMap<StoreKey, IndexEntry> getIndexEntriesForPartition(String partitionName) {
+    return inMemoryIndex.get(partitionName);
+  }
+
   /**
    * Returns replication thread
    */

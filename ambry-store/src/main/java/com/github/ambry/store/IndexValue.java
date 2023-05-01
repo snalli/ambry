@@ -226,7 +226,7 @@ public class IndexValue implements Comparable<IndexValue> {
   /**
    * @return the size of the blob that this index value refers to
    */
-  long getSize() {
+  public long getSize() {
     return size;
   }
 

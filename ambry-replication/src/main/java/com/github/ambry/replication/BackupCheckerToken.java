@@ -15,26 +15,33 @@ public class BackupCheckerToken {
   public static final String REPLICA_PATH = "replica_path";
   public static final String AMBRY_REPLICATION_TOKEN = "ambry_replication_token";
   public static final String LAG_IN_BYTES = "lag_in_bytes";
-  public static final String NUM_BLOBS_REPLICATED = "num_blobs_replicated";
-  public static final String NUM_MISSING_DELETE = "num_missing_delete";
-  public static final String NUM_MISSING_PUT = "num_missing_put";
-  public static final String NUM_MISSING_TTL_UPDATE = "num_missing_ttl_update";
-  public static final String NUM_MISSING_UNDELETE = "num_missing_undelete";
-  public static final String NUM_KEYS_IN_PEER_NOT_IN_COSMOS = "num_keys_in_peer_not_in_cosmos";
-  public static final String NUM_KEYS_IN_COSMOS_NOT_IN_PEER = "num_keys_in_cosmos_not_in_peer";
+  public static final String NUM_KEYS_IN_PEER = "num_perm_keys_in_peer";
+  public static final String NUM_DELETED_OR_EXPIRED_KEYS_IN_PEER = "num_keys_in_peer_deleted_or_expired";
+
+  public static final String NUM_KEYS_IN_COSMOS = "num_perm_keys_in_cosmos";
+  public static final String NUM_MISSING_PUT = "num_put_in_peer_not_in_cosmos";
+  public static final String NUM_MISSING_DELETE = "num_delete_in_peer_not_in_cosmos";
+  public static final String NUM_MISSING_TTL_UPDATE = "num_ttl_update_in_peer_not_in_cosmos";
+  public static final String NUM_MISSING_UNDELETE = "num_undelete_in_peer_not_in_cosmos";
+  public static final String NUM_KEYS_IN_PEER_NOT_IN_COSMOS = "num_perm_keys_in_peer_not_in_cosmos";
+  public static final String NUM_KEYS_IN_COSMOS_NOT_IN_PEER = "num_perm_keys_in_cosmos_not_in_peer";
+  public static final String NUM_BYTES_IN_COSMOS_NOT_IN_PEER = "num_bytes_in_cosmos_not_in_peer";
 
   protected long partitionId = 0;
   protected String datanodeId = null;
   protected String replicaPath = null;
   protected String ambryReplicationToken = null;
   protected long lagInBytes;
-  protected long numBlobsReplicated;
+  protected long numKeysInPeer;
+  protected long numKeysInCosmos;
   protected long numMissingDelete;
   protected long numMissingPut;
   protected long numMissingTtlUpdate;
   protected long numMissingUndelete;
   protected long numKeysInPeerNotInCosmos;
   protected long numKeysInCosmosNotInPeer;
+  protected long numKeysInPeerDeletedOrExpired;
+  protected long numBytesInCosmosNotInPeer;
 
   public BackupCheckerToken(long id, String hostname, String replicaPath, String ambryReplicationToken, long lagInBytes,
       long numBlobsReplicated, long numMissingDelete, long numMissingPut, long numMissingTtlUpdate,
@@ -44,9 +51,7 @@ public class BackupCheckerToken {
     this.replicaPath = replicaPath;
     this.ambryReplicationToken = ambryReplicationToken;
     this.lagInBytes = lagInBytes;
-    this.numBlobsReplicated = numBlobsReplicated;
     this.numMissingDelete = numMissingDelete;
-    this.numMissingPut = numMissingPut;
     this.numMissingTtlUpdate = numMissingTtlUpdate;
     this.numMissingUndelete = numMissingUndelete;
   }
@@ -55,38 +60,18 @@ public class BackupCheckerToken {
     this.partitionId = jsonObject.getLong(PARTITION_ID);
     this.datanodeId = jsonObject.getString(DATANODE_ID);
     this.replicaPath = jsonObject.getString(REPLICA_PATH);
+    this.lagInBytes = jsonObject.getLong(LAG_IN_BYTES);
     this.ambryReplicationToken = jsonObject.getString(AMBRY_REPLICATION_TOKEN);
-    this.numBlobsReplicated = jsonObject.getLong(NUM_BLOBS_REPLICATED);
+    this.numKeysInPeer = jsonObject.getLong(NUM_KEYS_IN_PEER);
+    this.numKeysInPeerNotInCosmos = jsonObject.getLong(NUM_KEYS_IN_PEER_NOT_IN_COSMOS);
+    this.numKeysInPeerDeletedOrExpired = jsonObject.getLong(NUM_DELETED_OR_EXPIRED_KEYS_IN_PEER);
     this.numMissingDelete = jsonObject.getLong(NUM_MISSING_DELETE);
     this.numMissingPut = jsonObject.getLong(NUM_MISSING_PUT);
     this.numMissingTtlUpdate = jsonObject.getLong(NUM_MISSING_TTL_UPDATE);
     this.numMissingUndelete = jsonObject.getLong(NUM_MISSING_UNDELETE);
-    this.numKeysInPeerNotInCosmos = jsonObject.getLong(NUM_KEYS_IN_PEER_NOT_IN_COSMOS);
+    this.numKeysInCosmos = jsonObject.getLong(NUM_KEYS_IN_COSMOS);
     this.numKeysInCosmosNotInPeer = jsonObject.getLong(NUM_KEYS_IN_COSMOS_NOT_IN_PEER);
-  }
-
-  public long getNumBlobsReplicated() {
-    return numBlobsReplicated;
-  }
-
-  public long setNumKeysInPeerNotInCosmos(long num) {
-    this.numKeysInPeerNotInCosmos = num;
-    return numKeysInPeerNotInCosmos;
-  }
-
-  public long setNumKeysInCosmosNotInPeer(long num) {
-    this.numKeysInCosmosNotInPeer = num;
-    return numKeysInCosmosNotInPeer;
-  }
-
-  public long setNumBlobsReplicated(long num) {
-    this.numBlobsReplicated = num;
-    return this.numBlobsReplicated;
-  }
-
-  public long incrementNumBlobsReplicated(long inc) {
-    this.numBlobsReplicated += inc;
-    return this.numBlobsReplicated;
+    this.numBytesInCosmosNotInPeer = jsonObject.getLong(NUM_BYTES_IN_COSMOS_NOT_IN_PEER);
   }
 
   public long incrementNumMissingDelete(long inc) {
@@ -109,6 +94,31 @@ public class BackupCheckerToken {
     return this.numMissingUndelete;
   }
 
+  public long setNumKeysInPeerNotInCosmos(long num) {
+    this.numKeysInPeerNotInCosmos = num;
+    return numKeysInPeerNotInCosmos;
+  }
+
+  public long setNumKeysInCosmosNotInPeer(long num) {
+    this.numKeysInCosmosNotInPeer = num;
+    return numKeysInCosmosNotInPeer;
+  }
+
+  public long setNumBytesInCosmosNotInPeer(long num) {
+    this.numBytesInCosmosNotInPeer = num;
+    return this.numBytesInCosmosNotInPeer;
+  }
+
+  public long setNumKeysInPeer(long num) {
+    this.numKeysInPeer = num;
+    return this.numKeysInPeer;
+  }
+
+  public long setNumKeysInCosmos(long num) {
+    this.numKeysInCosmos = num;
+    return this.numKeysInCosmos;
+  }
+
   public long setLagInBytes(long lagInBytes) {
     this.lagInBytes = lagInBytes;
     return lagInBytes;
@@ -117,6 +127,11 @@ public class BackupCheckerToken {
   public String setAmbryToken(String ambryReplicationToken) {
     this.ambryReplicationToken = ambryReplicationToken;
     return ambryReplicationToken;
+  }
+
+  public long setNumKeysInPeerDeletedOrExpired(long inc) {
+    this.numKeysInPeerDeletedOrExpired = inc;
+    return this.numKeysInPeerDeletedOrExpired;
   }
 
   public String toString() {
@@ -135,13 +150,16 @@ public class BackupCheckerToken {
     jsonObject.put(REPLICA_PATH, this.replicaPath);
     jsonObject.put(AMBRY_REPLICATION_TOKEN, this.ambryReplicationToken);
     jsonObject.put(LAG_IN_BYTES, this.lagInBytes);
-    jsonObject.put(NUM_BLOBS_REPLICATED, this.numBlobsReplicated);
+    jsonObject.put(NUM_KEYS_IN_PEER, this.numKeysInPeer);
+    jsonObject.put(NUM_KEYS_IN_PEER_NOT_IN_COSMOS, this.numKeysInPeerNotInCosmos);
+    jsonObject.put(NUM_DELETED_OR_EXPIRED_KEYS_IN_PEER, this.numKeysInPeerDeletedOrExpired);
     jsonObject.put(NUM_MISSING_DELETE, this.numMissingDelete);
     jsonObject.put(NUM_MISSING_PUT, this.numMissingPut);
     jsonObject.put(NUM_MISSING_TTL_UPDATE, this.numMissingTtlUpdate);
     jsonObject.put(NUM_MISSING_UNDELETE, this.numMissingUndelete);
-    jsonObject.put(NUM_KEYS_IN_PEER_NOT_IN_COSMOS, this.numKeysInPeerNotInCosmos);
+    jsonObject.put(NUM_KEYS_IN_COSMOS, this.numKeysInCosmos);
     jsonObject.put(NUM_KEYS_IN_COSMOS_NOT_IN_PEER, this.numKeysInCosmosNotInPeer);
+    jsonObject.put(NUM_BYTES_IN_COSMOS_NOT_IN_PEER, this.numBytesInCosmosNotInPeer);
     return jsonObject.toString(4);
   }
 }
