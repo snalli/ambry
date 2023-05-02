@@ -403,7 +403,7 @@ public class BackupCheckerThread extends ReplicaThread {
           fileManager.appendToFile(keysInPeerNotInCosmosFile, key + "\n");
         }
         for (StoreKey storeKey : storeKeysInCosmosNotInPeer) {
-          fileManager.appendToFile(keysInCosmosNotInPeerFile, storeKey.getID().toString() + "\n");
+          fileManager.appendToFile(keysInCosmosNotInPeerFile, storeKey.getID() + "\n");
         }
         this.replicationStatusHashMap.put(partitionId, ReplicationStatus.Stats);
         break;
