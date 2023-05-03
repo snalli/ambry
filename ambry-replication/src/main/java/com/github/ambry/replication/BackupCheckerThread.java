@@ -371,8 +371,18 @@ public class BackupCheckerThread extends ReplicaThread {
         currBackupCheckerToken = getOrCreateToken(remoteReplicaInfo);
         HashMap<StoreKey, IndexEntry> indexEntriesInCosmos = this.backupCheckerManager.getIndexEntriesForPartition(
             String.valueOf(remoteReplicaInfo.getReplicaId().getPartitionId().getId()));
-        Set<String> keysInCosmos =
-            indexEntriesInCosmos.keySet().stream().map(k -> k.toString()).collect(Collectors.toSet());
+        Set<String> keysInCosmos = new HashSet<>();
+        for (StoreKey storeKey : indexEntriesInCosmos.keySet()) {
+          MessageInfo localBlob;
+          try {
+            localBlob = remoteReplicaInfo.getLocalStore().findKey(storeKey);
+            if (!localBlob.isExpired() && !localBlob.isDeleted()) {
+              keysInCosmos.add(storeKey.getID());
+            }
+          } catch (StoreException e) {
+            throw new RuntimeException(e);
+          }
+        }
         Set<String> keysInPeerNotInCosmos = keysInPeerServerHashMap.get(partitionId)
             .stream()
             .filter(k -> !keysInCosmos.contains(k))
@@ -396,6 +406,9 @@ public class BackupCheckerThread extends ReplicaThread {
         currBackupCheckerToken.setNumKeysInPeerNotInCosmos(keysInPeerNotInCosmos.size());
         currBackupCheckerToken.setNumKeysInCosmosNotInPeer(storeKeysInCosmosNotInPeer.size());
         currBackupCheckerToken.setNumBytesInCosmosNotInPeer(numBytesInCosmosNotInPeer);
+        currBackupCheckerToken.setNumKeysInPeer(keysInPeerServerHashMap.get(partitionId).size());
+        currBackupCheckerToken.setNumKeysInPeerDeletedOrExpired(
+            keysDeletedOrExpiredInPeerServerHashMap.get(partitionId).size());
         persistBackupCheckerToken(remoteReplicaInfo, currBackupCheckerToken);
         String keysInCosmosNotInPeerFile = getFilePath(remoteReplicaInfo, "keysInCosmosNotInPeer");
         String keysInPeerNotInCosmosFile = getFilePath(remoteReplicaInfo, "keysInPeerNotInCosmos");
