@@ -413,10 +413,16 @@ public class BackupCheckerThread extends ReplicaThread {
         String keysInCosmosNotInPeerFile = getFilePath(remoteReplicaInfo, "keysInCosmosNotInPeer");
         String keysInPeerNotInCosmosFile = getFilePath(remoteReplicaInfo, "keysInPeerNotInCosmos");
         for (String key : keysInPeerNotInCosmos) {
-          fileManager.appendToFile(keysInPeerNotInCosmosFile, key + "\n");
+          fileManager.appendToFileNoTime(keysInPeerNotInCosmosFile, key + "\n");
         }
         for (StoreKey storeKey : storeKeysInCosmosNotInPeer) {
-          fileManager.appendToFile(keysInCosmosNotInPeerFile, storeKey.getID() + "\n");
+          MessageInfo localBlob;
+          try {
+            localBlob = remoteReplicaInfo.getLocalStore().findKey(storeKey);
+          } catch (StoreException e) {
+            throw new RuntimeException(e);
+          }
+          fileManager.appendToFileNoTime(keysInCosmosNotInPeerFile, getBlobInfoText(localBlob));
         }
         this.replicationStatusHashMap.put(partitionId, ReplicationStatus.Stats);
         break;
@@ -424,6 +430,13 @@ public class BackupCheckerThread extends ReplicaThread {
       case Stats:
       default:
     }
+  }
+
+  String getBlobInfoText(MessageInfo messageInfo) {
+    StoreKey storeKey = messageInfo.getStoreKey();
+    String text = String.format("%s %s %s\n", storeKey.getID(), messageInfo.getOperationTimeMs(),
+        DATE_FORMAT.format(messageInfo.getOperationTimeMs()));
+    return text;
   }
 
   /**

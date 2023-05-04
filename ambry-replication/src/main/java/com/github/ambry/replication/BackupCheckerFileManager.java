@@ -130,7 +130,24 @@ public class BackupCheckerFileManager {
       options.add(StandardOpenOption.CREATE);
     }
     SeekableByteChannel seekableByteChannel = getFd(filePath, options);
-    return writeToFile(seekableByteChannel, String.join(COLUMN_SEPARATOR, DATE_FORMAT.format(System.currentTimeMillis()), text));
+    return writeToFile(seekableByteChannel,
+        String.join(COLUMN_SEPARATOR, DATE_FORMAT.format(System.currentTimeMillis()), text));
+  }
+
+  /**
+   * Append to a given file.
+   * Creates the file if absent.
+   * @param filePath Path of the file in the system
+   * @param text Text to append
+   * @return True if append was successful, false otherwise
+   */
+  public boolean appendToFileNoTime(String filePath, String text) {
+    EnumSet<StandardOpenOption> options = EnumSet.of(StandardOpenOption.APPEND);
+    if (!Files.exists(Paths.get(filePath))) {
+      options.add(StandardOpenOption.CREATE);
+    }
+    SeekableByteChannel seekableByteChannel = getFd(filePath, options);
+    return writeToFile(seekableByteChannel, text);
   }
 
   /**
