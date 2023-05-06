@@ -148,82 +148,86 @@ public class RecoveryThread extends ReplicaThread {
 
       RecoveryToken currRecoveryToken = (RecoveryToken) remoteReplicaInfo.getToken();
       RecoveryToken nextRecoveryToken = new RecoveryToken();
-
+      List<MessageInfo> messageEntries = new ArrayList<>();
       if (currRecoveryToken.isEndOfPartitionReached()) {
         logger.trace("|snkt| End of partition reached for {}", partitionPath);
-        continue;
-      }
+        replicaMetadataResponseList.add(
+            new ReplicaMetadataResponseInfo(partitionId, replicaType, currRecoveryToken, messageEntries,
+                getRemoteReplicaLag(store, currRecoveryToken.getNumBlobBytes()), replicaMetadataRequestVersion));
+      } else {
+        String cosmosQuery = String.format(COSMOS_QUERY, partitionPath);
+        CosmosQueryRequestOptions cosmosQueryRequestOptions = new CosmosQueryRequestOptions();
+        cosmosQueryRequestOptions.setPartitionKey(new PartitionKey(partitionPath));
+        // eventual consistency is cheapest
+        cosmosQueryRequestOptions.setConsistencyLevel(ConsistencyLevel.EVENTUAL);
+        long lastQueryTime = System.currentTimeMillis();
+        String queryName = String.join("_", "recovery_query", partitionPath, String.valueOf(lastQueryTime));
+        cosmosQueryRequestOptions.setQueryName(queryName);
+        logger.trace("| snkt | queryName = {} | Sending cosmos query '{}'", queryName, cosmosQuery);
+        try {
 
-      String cosmosQuery = String.format(COSMOS_QUERY, partitionPath);
-      CosmosQueryRequestOptions cosmosQueryRequestOptions = new CosmosQueryRequestOptions();
-      cosmosQueryRequestOptions.setPartitionKey(new PartitionKey(partitionPath));
-      // eventual consistency is cheapest
-      cosmosQueryRequestOptions.setConsistencyLevel(ConsistencyLevel.EVENTUAL);
-      long lastQueryTime = System.currentTimeMillis();
-      String queryName = String.join("_", "recovery_query", partitionPath, String.valueOf(lastQueryTime));
-      cosmosQueryRequestOptions.setQueryName(queryName);
-      logger.trace("| snkt | queryName = {} | Sending cosmos query '{}'", queryName, cosmosQuery);
-      try {
+          long startTime = System.currentTimeMillis();
 
-        long startTime = System.currentTimeMillis();
+          Iterable<FeedResponse<CloudBlobMetadata>> cloudBlobMetadataIter =
+              cosmosContainer.queryItems(cosmosQuery, cosmosQueryRequestOptions, CloudBlobMetadata.class)
+                  .iterableByPage(currRecoveryToken.getCosmosContinuationToken());
 
-        Iterable<FeedResponse<CloudBlobMetadata>> cloudBlobMetadataIter =
-            cosmosContainer.queryItems(cosmosQuery, cosmosQueryRequestOptions, CloudBlobMetadata.class).iterableByPage(currRecoveryToken.getCosmosContinuationToken());
+          int numPages = 0, numItems = 0;
+          double requestCharge = 0;
+          String firstBlobId = currRecoveryToken.getEarliestBlob(), lastBlobId = currRecoveryToken.getLatestBlob();
+          long totalBlobBytesRead = 0, backupStartTime = currRecoveryToken.getBackupStartTimeMs(), backupEndTime =
+              currRecoveryToken.getBackupEndTimeMs();
 
-        int numPages = 0, numItems = 0;
-        double requestCharge = 0;
-        String firstBlobId = currRecoveryToken.getEarliestBlob(), lastBlobId = currRecoveryToken.getLatestBlob();
-        long totalBlobBytesRead = 0, backupStartTime = currRecoveryToken.getBackupStartTimeMs(),
-            backupEndTime = currRecoveryToken.getBackupEndTimeMs();
-        List<MessageInfo> messageEntries = new ArrayList<>();
-        for (FeedResponse<CloudBlobMetadata> page : cloudBlobMetadataIter) {
-          requestCharge += page.getRequestCharge();
-          for (CloudBlobMetadata cloudBlobMetadata : page.getResults()) {
-            MessageInfo messageInfo = getMessageInfoFromMetadata(cloudBlobMetadata);
-            messageEntries.add(messageInfo);
-            totalBlobBytesRead += cloudBlobMetadata.getSize();
-            if (backupStartTime == -1 || (cloudBlobMetadata.getCreationTime() < backupStartTime)) {
-              backupStartTime = cloudBlobMetadata.getCreationTime();
-              firstBlobId = cloudBlobMetadata.getId();
+          for (FeedResponse<CloudBlobMetadata> page : cloudBlobMetadataIter) {
+            requestCharge += page.getRequestCharge();
+            for (CloudBlobMetadata cloudBlobMetadata : page.getResults()) {
+              MessageInfo messageInfo = getMessageInfoFromMetadata(cloudBlobMetadata);
+              messageEntries.add(messageInfo);
+              totalBlobBytesRead += cloudBlobMetadata.getSize();
+              if (backupStartTime == -1 || (cloudBlobMetadata.getCreationTime() < backupStartTime)) {
+                backupStartTime = cloudBlobMetadata.getCreationTime();
+                firstBlobId = cloudBlobMetadata.getId();
+              }
+              if (backupEndTime == -1 || (backupEndTime < cloudBlobMetadata.getLastUpdateTime() * 1000)) {
+                backupEndTime = cloudBlobMetadata.getLastUpdateTime() * 1000;
+                lastBlobId = cloudBlobMetadata.getId();
+              }
+              numItems += !(messageInfo.isDeleted() || messageInfo.isExpired()) ? 1 : 0;
             }
-            if (backupEndTime == -1 || (backupEndTime < cloudBlobMetadata.getLastUpdateTime() * 1000)) {
-              backupEndTime = cloudBlobMetadata.getLastUpdateTime() * 1000;
-              lastBlobId = cloudBlobMetadata.getId();
-            }
-            numItems += !(messageInfo.isDeleted() || messageInfo.isExpired()) ? 1 : 0;
+            /**
+             if (numItems != page.getResults().size()) {
+             logger.error("|snkt| Item count mismatch numItems = {}, page.size = {}, prev_token = {}", numItems, page.getResults().size(), currRecoveryToken.getCosmosContinuationToken());
+             }
+             */
+            String nextCosmosContinuationToken = getCosmosContinuationToken(page.getContinuationToken());
+            nextRecoveryToken = new RecoveryToken(queryName,
+                nextCosmosContinuationToken == null ? currRecoveryToken.getCosmosContinuationToken()
+                    : page.getContinuationToken(), currRecoveryToken.getRequestUnits() + page.getRequestCharge(),
+                currRecoveryToken.getNumItems() + (currRecoveryToken.isEndOfPartitionReached() ? 0 : numItems),
+                currRecoveryToken.getNumBlobBytes() + (currRecoveryToken.isEndOfPartitionReached() ? 0
+                    : totalBlobBytesRead), nextCosmosContinuationToken == null, currRecoveryToken.getTokenCreateTime(),
+                backupStartTime, backupEndTime, lastQueryTime, firstBlobId, lastBlobId);
+            ++numPages;
+            long resultFetchtime = System.currentTimeMillis() - startTime;
+            logger.trace(
+                "| snkt | [{}] | Received cosmos query results page = {}, time = {} ms, RU = {}/s, numRows = {}, tokenLen = {}, isTokenNull = {}, isTokenSameAsPrevious = {}",
+                queryName, numPages, resultFetchtime, requestCharge, page != null ? page.getResults().size() : "null",
+                nextCosmosContinuationToken != null ? nextCosmosContinuationToken.length() : "null",
+                nextCosmosContinuationToken != null ? nextCosmosContinuationToken.isEmpty() : "null",
+                nextCosmosContinuationToken != null ? nextCosmosContinuationToken.equals(
+                    currRecoveryToken.getCosmosContinuationToken()) : "null");
+
+            break;
           }
-          /**
-           if (numItems != page.getResults().size()) {
-           logger.error("|snkt| Item count mismatch numItems = {}, page.size = {}, prev_token = {}", numItems, page.getResults().size(), currRecoveryToken.getCosmosContinuationToken());
-           }
-           */
-          String nextCosmosContinuationToken = getCosmosContinuationToken(page.getContinuationToken());
-          nextRecoveryToken = new RecoveryToken(queryName,
-              nextCosmosContinuationToken == null ? currRecoveryToken.getCosmosContinuationToken() : page.getContinuationToken(),
-              currRecoveryToken.getRequestUnits() + page.getRequestCharge(),
-              currRecoveryToken.getNumItems() + (currRecoveryToken.isEndOfPartitionReached() ? 0 : numItems),
-              currRecoveryToken.getNumBlobBytes() + (currRecoveryToken.isEndOfPartitionReached() ? 0 : totalBlobBytesRead),
-              nextCosmosContinuationToken == null, currRecoveryToken.getTokenCreateTime(), backupStartTime, backupEndTime, lastQueryTime, firstBlobId, lastBlobId);
-          ++numPages;
-          long resultFetchtime = System.currentTimeMillis() - startTime;
-          logger.trace(
-              "| snkt | [{}] | Received cosmos query results page = {}, time = {} ms, RU = {}/s, numRows = {}, tokenLen = {}, isTokenNull = {}, isTokenSameAsPrevious = {}",
-              queryName, numPages, resultFetchtime, requestCharge,
-              page != null ? page.getResults().size() : "null",
-              nextCosmosContinuationToken != null ? nextCosmosContinuationToken.length() : "null",
-              nextCosmosContinuationToken != null ? nextCosmosContinuationToken.isEmpty() : "null",
-              nextCosmosContinuationToken != null ? nextCosmosContinuationToken.equals(currRecoveryToken.getCosmosContinuationToken()) : "null");
+          replicaMetadataResponseList.add(
+              new ReplicaMetadataResponseInfo(partitionId, replicaType, nextRecoveryToken, messageEntries,
+                  getRemoteReplicaLag(store, totalBlobBytesRead), replicaMetadataRequestVersion));
+          // Catching and printing CosmosException does not work. The error is thrown and printed elsewhere.
 
-          break;
+        } catch (Exception exception) {
+          logger.error("[{}] Failed due to {}", queryName, exception);
+          throw exception;
         }
-        replicaMetadataResponseList.add(new ReplicaMetadataResponseInfo(partitionId, replicaType,
-            nextRecoveryToken,
-            messageEntries, getRemoteReplicaLag(store, totalBlobBytesRead), replicaMetadataRequestVersion));
-        // Catching and printing CosmosException does not work. The error is thrown and printed elsewhere.
-
-      } catch (Exception exception) {
-        logger.error("[{}] Failed due to {}", queryName, exception);
-        throw exception;
       }
     }
     replicaMetadataResponse =
@@ -260,7 +264,8 @@ public class RecoveryThread extends ReplicaThread {
                   new MessageFormatWriteSet(infiniteByteStream, Collections.singletonList(messageInfo), false);
               remoteReplicaInfo.getLocalStore().put(writeSet);
           } catch (Exception e) {
-            logger.error("|snkt| Failed to write missing keys due to {}", e.toString());
+            logger.error("|snkt| {} | Failed to write missing keys due to {}", messageInfo.getStoreKey().toString(),
+                e.toString());
           }
         }
         advanceToken(remoteReplicaInfo, exchangeMetadataResponse);

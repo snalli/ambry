@@ -1127,7 +1127,7 @@ public class BlobStore implements Store {
       for (ReplicaStatusDelegate replicaStatusDelegate : replicaStatusDelegates) {
         if (!replicaStatusDelegate.seal(replicaId)) {
           metrics.sealSetError.inc();
-          logger.warn("Could not set the partition as read-only status on {}", replicaId);
+          logger.trace("Could not set the partition as read-only status on {}", replicaId);
           replicaSealStatus.set(oldReplicaSealStatus);
         } else {
           metrics.sealDoneCount.inc();
@@ -1143,7 +1143,7 @@ public class BlobStore implements Store {
       for (ReplicaStatusDelegate replicaStatusDelegate : replicaStatusDelegates) {
         if (!replicaStatusDelegate.partialSeal(replicaId)) {
           metrics.partialSealSetError.inc();
-          logger.warn("Could not set the partition as partially-sealed status on {}", replicaId);
+          logger.trace("Could not set the partition as partially-sealed status on {}", replicaId);
           replicaSealStatus.set(oldReplicaSealStatus);
         } else {
           metrics.partialSealDoneCount.inc();
@@ -1160,7 +1160,7 @@ public class BlobStore implements Store {
       for (ReplicaStatusDelegate replicaStatusDelegate : replicaStatusDelegates) {
         if (!replicaStatusDelegate.unseal(replicaId)) {
           metrics.unsealSetError.inc();
-          logger.warn("Could not set the partition as not sealed on {}", replicaId);
+          logger.trace("Could not set the partition as not sealed on {}", replicaId);
           replicaSealStatus.set(oldReplicaSealStatus);
         } else {
           metrics.unsealDoneCount.inc();
