@@ -149,12 +149,6 @@ public class RecoveryThread extends ReplicaThread {
       RecoveryToken currRecoveryToken = (RecoveryToken) remoteReplicaInfo.getToken();
       RecoveryToken nextRecoveryToken = new RecoveryToken();
       List<MessageInfo> messageEntries = new ArrayList<>();
-      if (currRecoveryToken.isEndOfPartitionReached()) {
-        logger.trace("|snkt| End of partition reached for {}", partitionPath);
-        replicaMetadataResponseList.add(
-            new ReplicaMetadataResponseInfo(partitionId, replicaType, currRecoveryToken, messageEntries,
-                getRemoteReplicaLag(store, currRecoveryToken.getNumBlobBytes()), replicaMetadataRequestVersion));
-      } else {
         String cosmosQuery = String.format(COSMOS_QUERY, partitionPath);
         CosmosQueryRequestOptions cosmosQueryRequestOptions = new CosmosQueryRequestOptions();
         cosmosQueryRequestOptions.setPartitionKey(new PartitionKey(partitionPath));
@@ -228,7 +222,6 @@ public class RecoveryThread extends ReplicaThread {
           logger.error("[{}] Failed due to {}", queryName, exception);
           throw exception;
         }
-      }
     }
     replicaMetadataResponse =
         new ReplicaMetadataResponse(correlationId, this.dataNodeId.getHostname(), ServerErrorCode.No_Error,
