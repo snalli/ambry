@@ -333,12 +333,11 @@ public class BackupCheckerThread extends ReplicaThread {
    * Prints a log if local store has caught up with remote store
    *
    * @param remoteReplicaInfo           Info about remote replica
-   * @param exchangeMetadataResponse    Metadata response object
    * @param replicaMetadataResponseInfo
    */
   @Override
   protected void logReplicationStatus(RemoteReplicaInfo remoteReplicaInfo,
-      ExchangeMetadataResponse exchangeMetadataResponse, ReplicaMetadataResponseInfo replicaMetadataResponseInfo) {
+      ReplicaMetadataResponseInfo replicaMetadataResponseInfo) {
     BackupCheckerToken currBackupCheckerToken;
     String replicaId = getReplicaId(remoteReplicaInfo);
     if (!this.replicationStatusHashMap.containsKey(replicaId)) {
@@ -358,7 +357,7 @@ public class BackupCheckerThread extends ReplicaThread {
 
       case InProgress:
         currBackupCheckerToken = getOrCreateToken(remoteReplicaInfo);
-        currBackupCheckerToken.setLagInBytes(exchangeMetadataResponse.localLagFromRemoteInBytes);
+        currBackupCheckerToken.setLagInBytes(replicaMetadataResponseInfo.getRemoteReplicaLagInBytes());
         for (MessageInfo messageInfo : replicaMetadataResponseInfo.getMessageInfoList()) {
           if (!(messageInfo.isDeleted() || messageInfo.isExpired())) {
             keysInPeerServerHashMap.get(replicaId).add(messageInfo.getStoreKey().toString());
@@ -370,7 +369,7 @@ public class BackupCheckerThread extends ReplicaThread {
         currBackupCheckerToken.setNumKeysInPeerDeletedOrExpired(
             keysDeletedOrExpiredInPeerServerHashMap.get(replicaId).size());
         persistBackupCheckerToken(remoteReplicaInfo, currBackupCheckerToken);
-        if (exchangeMetadataResponse.localLagFromRemoteInBytes == 0) {
+        if (replicaMetadataResponseInfo.getRemoteReplicaLagInBytes() == 0) {
           this.replicationStatusHashMap.put(replicaId, ReplicationStatus.Completed);
         }
         break;

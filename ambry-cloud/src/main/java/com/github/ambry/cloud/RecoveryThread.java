@@ -334,17 +334,16 @@ public class RecoveryThread extends ReplicaThread {
    * Prints recovery progress when recovering from cloud
    *
    * @param remoteReplicaInfo           Info about remote replica
-   * @param exchangeMetadataResponse    Metadata response object
    * @param replicaMetadataResponseInfo
    */
   @Override
   protected void logReplicationStatus(RemoteReplicaInfo remoteReplicaInfo,
-      ExchangeMetadataResponse exchangeMetadataResponse, ReplicaMetadataResponseInfo replicaMetadataResponseInfo) {
+      ReplicaMetadataResponseInfo replicaMetadataResponseInfo) {
     // This will help us know when to stop recovery process
     String text =
         String.format("%s | ReplicaType = %s | Token = %s | localLagFromRemoteInBytes = %s \n", remoteReplicaInfo,
             remoteReplicaInfo.getLocalReplicaId().getReplicaType(), remoteReplicaInfo.getToken().toString(),
-            exchangeMetadataResponse.localLagFromRemoteInBytes);
+            replicaMetadataResponseInfo.getRemoteReplicaLagInBytes());
     logger.trace("|snkt|{}", text);
     // fileManager.truncateAndWriteToFile(getFilePath(remoteReplicaInfo, RECOVERY_STATUS_FILE), text);
   }

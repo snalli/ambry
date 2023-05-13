@@ -252,15 +252,14 @@ public class ReplicaThread implements Runnable {
    * Logs replication progress of local node against some remote node
    *
    * @param remoteReplicaInfo           remote replica information
-   * @param exchangeMetadataResponse    metadata information from remote node
    * @param replicaMetadataResponseInfo
    */
   protected void logReplicationStatus(RemoteReplicaInfo remoteReplicaInfo,
-      ExchangeMetadataResponse exchangeMetadataResponse, ReplicaMetadataResponseInfo replicaMetadataResponseInfo) {
+      ReplicaMetadataResponseInfo replicaMetadataResponseInfo) {
     logger.trace("ReplicationStatus | {} | {} | isSealed = {} | Token = {} | localLagFromRemoteInBytes = {}",
         remoteReplicaInfo, remoteReplicaInfo.getReplicaId().getReplicaType(),
         remoteReplicaInfo.getReplicaId().isSealed(), remoteReplicaInfo.getToken().toString(),
-        exchangeMetadataResponse.localLagFromRemoteInBytes);
+        replicaMetadataResponseInfo.getRemoteReplicaLagInBytes());
   }
 
   @Override
@@ -683,6 +682,10 @@ public class ReplicaThread implements Runnable {
             logger.trace("Remote node: {} Thread name: {} Remote replica: {} Token from remote: {} Replica lag: {} ",
                 remoteNode, threadName, remoteReplicaInfo.getReplicaId(), replicaMetadataResponseInfo.getFindToken(),
                 replicaMetadataResponseInfo.getRemoteReplicaLagInBytes());
+
+            // trace replication status to track progress of recovery from cloud
+            logReplicationStatus(remoteReplicaInfo, replicaMetadataResponseInfo);
+
             Set<MessageInfo> remoteMissingStoreMessages =
                 getMissingStoreMessages(replicaMetadataResponseInfo, remoteNode, remoteReplicaInfo);
             processReplicaMetadataResponse(remoteMissingStoreMessages, replicaMetadataResponseInfo, remoteReplicaInfo,
@@ -723,9 +726,6 @@ public class ReplicaThread implements Runnable {
                   time.milliseconds() + replicationConfig.replicationSyncedReplicaBackoffDurationMs);
               syncedBackOffCount.inc();
             }
-
-            // trace replication status to track progress of recovery from cloud
-            logReplicationStatus(remoteReplicaInfo, exchangeMetadataResponse, replicaMetadataResponseInfo);
 
             // There are no missing keys. We just advance the token
             if (exchangeMetadataResponse.missingStoreMessages.size() == 0) {
