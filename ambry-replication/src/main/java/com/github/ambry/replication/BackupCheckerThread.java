@@ -353,7 +353,6 @@ public class BackupCheckerThread extends ReplicaThread {
     switch (this.replicationStatusHashMap.get(replicaId)) {
       case NotStarted:
         this.replicationStatusHashMap.put(replicaId, ReplicationStatus.InProgress);
-        break;
 
       case InProgress:
         currBackupCheckerToken = getOrCreateToken(remoteReplicaInfo);
