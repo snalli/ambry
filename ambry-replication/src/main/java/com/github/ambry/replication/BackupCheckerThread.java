@@ -17,6 +17,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
+import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.messageformat.MessageSievingInputStream;
@@ -440,9 +441,14 @@ public class BackupCheckerThread extends ReplicaThread {
 
   String getBlobInfoText(MessageInfo messageInfo) {
     StoreKey storeKey = messageInfo.getStoreKey();
-    String text = String.format("%s %s %s\n", storeKey.getID(), messageInfo.getOperationTimeMs(),
-        DATE_FORMAT.format(messageInfo.getOperationTimeMs()));
-    return text;
+    try {
+      BlobId blobId = new BlobId(storeKey.getID(), clusterMap);
+      String text = String.format("%s %s %s %s %s\n", storeKey.getID(), messageInfo.getOperationTimeMs(),
+          DATE_FORMAT.format(messageInfo.getOperationTimeMs()), blobId.getAccountId(), blobId.getContainerId());
+      return text;
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
   }
 
   /**
