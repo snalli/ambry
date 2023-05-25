@@ -405,7 +405,9 @@ public class Utils {
       // construct a java.nio.ByteBuffer to create a ByteBufferInputStream
       int startIndex = nettyByteBuf.readerIndex();
       output = nettyByteBuf.retainedSlice(startIndex, dataSize);
+      logger.info("|snkt| readNettyByteBufFromCrcInputStream | crc before update {}", crcStream.getValue());
       crcStream.updateCrc(output.nioBuffer());
+      logger.info("|snkt| readNettyByteBufFromCrcInputStream | crc after update {}", crcStream.getValue());
       nettyByteBuf.readerIndex(startIndex + dataSize);
     } else {
       ByteBuffer buffer = getByteBufferFromInputStream(crcStream, dataSize);

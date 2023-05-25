@@ -1813,11 +1813,13 @@ public class MessageFormatRecord {
       if (dataSize > Integer.MAX_VALUE) {
         throw new IOException("We only support data of max size == MAX_INT. Error while reading blob from store");
       }
+      long crcBeforeNetty = crcStream.getValue();
       ByteBuf byteBuf = Utils.readNettyByteBufFromCrcInputStream(crcStream, (int) dataSize);
       long crc = crcStream.getValue();
       long streamCrc = dataStream.readLong();
       if (crc != streamCrc) {
-        logger.error("corrupt data while parsing blob content expectedcrc {} actualcrc {}", crc, streamCrc);
+        logger.error("corrupt data while parsing blob content crcBeforeNetty {} computed-crc {} received-crc {}",
+            crcBeforeNetty, crc, streamCrc);
         throw new MessageFormatException("corrupt data while parsing blob content",
             MessageFormatErrorCodes.Data_Corrupt);
       }
