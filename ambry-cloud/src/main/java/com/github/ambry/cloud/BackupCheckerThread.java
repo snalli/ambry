@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.replication;
+package com.github.ambry.cloud;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
@@ -26,6 +26,11 @@ import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
+import com.github.ambry.replication.FindTokenHelper;
+import com.github.ambry.replication.RemoteReplicaInfo;
+import com.github.ambry.replication.ReplicaThread;
+import com.github.ambry.replication.ReplicationEngine;
+import com.github.ambry.replication.ReplicationMetrics;
 import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.IndexEntry;
 import com.github.ambry.store.MessageInfo;
@@ -76,7 +81,7 @@ public class BackupCheckerThread extends ReplicaThread {
   private final Logger logger = LoggerFactory.getLogger(BackupCheckerThread.class);
   protected final BackupCheckerFileManager fileManager;
   protected final ReplicationConfig replicationConfig;
-  public static final String DR_Verifier_Keyword = "dr";
+  public static final String DR_Verifier_Keyword = ReplicationEngine.DR_Verifier_Keyword;
   public static final String MISSING_KEYS_FILE = "missingKeys";
   public static final String REPLICA_STATUS_FILE = "replicaCheckStatus";
 
@@ -98,7 +103,7 @@ public class BackupCheckerThread extends ReplicaThread {
       NotificationSystem notification, StoreKeyConverter storeKeyConverter, Transformer transformer,
       MetricRegistry metricRegistry, boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler,
       Time time, ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
-      ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin,
+      ReplicationEngine.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin,
       BackupCheckerManager backupCheckerManager) {
     super(threadName, findTokenHelper, clusterMap, correlationIdGenerator, dataNodeId, connectionPool, networkClient,
         replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer, metricRegistry,

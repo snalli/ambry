@@ -11,7 +11,7 @@
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  */
-package com.github.ambry.replication;
+package com.github.ambry.cloud;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.commons.AmbryCache;
@@ -37,8 +37,7 @@ import org.slf4j.LoggerFactory;
  * File manager for BackupChecker, although it can be used for other purposes
  */
 public class BackupCheckerFileManager {
-
-  private final Logger logger = LoggerFactory.getLogger(com.github.ambry.replication.BackupCheckerFileManager.class);
+  private final Logger logger = LoggerFactory.getLogger(BackupCheckerFileManager.class);
   protected final ReplicationConfig replicationConfig;
   protected final AmbryCache fileDescriptorCache;
   public static final DateFormat DATE_FORMAT = new SimpleDateFormat("dd MMM yyyy HH:mm:ss:SSS");

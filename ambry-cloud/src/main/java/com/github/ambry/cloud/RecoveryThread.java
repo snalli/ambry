@@ -36,7 +36,6 @@ import com.github.ambry.network.NetworkClient;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.ReplicaMetadataResponse;
 import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
-import com.github.ambry.replication.BackupCheckerFileManager;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.RemoteReplicaInfo;
 import com.github.ambry.replication.ReplicaThread;

@@ -1,6 +1,10 @@
-package com.github.ambry.replication;
+package com.github.ambry.cloud;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.cloud.azure.AzureBlobDataAccessor;
+import com.github.ambry.cloud.azure.AzureBlobLayoutStrategy;
+import com.github.ambry.cloud.azure.AzureCloudConfig;
+import com.github.ambry.cloud.azure.AzureMetrics;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.ClusterParticipant;
 import com.github.ambry.clustermap.DataNodeId;
@@ -8,6 +12,7 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
 import com.github.ambry.commons.ResponseHandler;
+import com.github.ambry.config.CloudConfig;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.config.StoreConfig;
@@ -15,6 +20,11 @@ import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.replication.FindTokenHelper;
+import com.github.ambry.replication.ReplicaThread;
+import com.github.ambry.replication.ReplicationException;
+import com.github.ambry.replication.ReplicationManager;
+import com.github.ambry.replication.ReplicationMetrics;
 import com.github.ambry.server.StoreManager;
 import com.github.ambry.store.BlobStore;
 import com.github.ambry.store.FindEntriesCondition;
@@ -44,19 +54,21 @@ import java.util.stream.Collectors;
 public class BackupCheckerManager extends ReplicationManager {
 
   protected HashMap<String, HashMap<StoreKey, IndexEntry>> inMemoryIndex;
+  protected AzureBlobDataAccessor azureBlobDataAccessor;
 
   public BackupCheckerManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
       StoreConfig storeConfig, StoreManager storeManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
       ScheduledExecutorService scheduler, DataNodeId dataNode, ConnectionPool connectionPool,
       NetworkClientFactory networkClientFactory, MetricRegistry metricRegistry, NotificationSystem requestNotification,
       StoreKeyConverterFactory storeKeyConverterFactory, String transformerClassName,
-      ClusterParticipant clusterParticipant, Predicate<MessageInfo> skipPredicate) throws ReplicationException {
+      ClusterParticipant clusterParticipant, Predicate<MessageInfo> skipPredicate, CloudConfig cloudConfig,
+      AzureCloudConfig azureCloudConfig) throws ReplicationException {
     super(replicationConfig, clusterMapConfig, storeConfig, storeManager, storeKeyFactory, clusterMap, scheduler,
         dataNode, connectionPool, networkClientFactory, metricRegistry, requestNotification, storeKeyConverterFactory,
         transformerClassName, clusterParticipant, skipPredicate);
     logger.info("|snkt| Initializing BackupCheckerManager");
     inMemoryIndex = new HashMap<>();
-    for (PartitionId partitionId: storeManager.getLocalPartitions()) {
+    for (PartitionId partitionId : storeManager.getLocalPartitions()) {
       String partitionName = String.valueOf(partitionId.getId());
       ReplicaId localReplica = storeManager.getReplica(partitionName);
       if (localReplica == null) {
@@ -86,6 +98,14 @@ public class BackupCheckerManager extends ReplicationManager {
         }
       }
       logger.info("|snkt| partition = {}, numKeys = {}", partitionId, storeKeysToIndexEntryMap.size());
+    }
+    try {
+      this.azureBlobDataAccessor = new AzureBlobDataAccessor(cloudConfig, azureCloudConfig,
+          new AzureBlobLayoutStrategy(clusterMapConfig.clusterMapClusterName, azureCloudConfig),
+          new AzureMetrics(metricRegistry));
+      this.azureBlobDataAccessor.testConnectivity();
+    } catch (ReflectiveOperationException e) {
+      throw new RuntimeException(e);
     }
     logger.info("|snkt| Initialized BackupCheckerManager");
   }

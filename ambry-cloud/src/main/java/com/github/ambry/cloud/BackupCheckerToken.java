@@ -1,4 +1,4 @@
-package com.github.ambry.replication;
+package com.github.ambry.cloud;
 
 import java.lang.reflect.Field;
 import java.util.LinkedHashMap;

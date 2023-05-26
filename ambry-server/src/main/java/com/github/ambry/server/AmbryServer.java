@@ -20,6 +20,7 @@ import com.github.ambry.account.AccountServiceCallback;
 import com.github.ambry.account.AccountServiceFactory;
 import com.github.ambry.accountstats.AccountStatsMySqlStore;
 import com.github.ambry.accountstats.AccountStatsMySqlStoreFactory;
+import com.github.ambry.cloud.BackupCheckerManager;
 import com.github.ambry.cloud.RecoveryManager;
 import com.github.ambry.cloud.azure.AzureCloudConfig;
 import com.github.ambry.clustermap.ClusterAgentsFactory;
@@ -64,7 +65,6 @@ import com.github.ambry.network.http2.Http2ServerMetrics;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.protocol.AmbryRequests;
 import com.github.ambry.protocol.RequestHandlerPool;
-import com.github.ambry.replication.BackupCheckerManager;
 import com.github.ambry.replication.CloudToStoreReplicationManager;
 import com.github.ambry.replication.FindTokenHelper;
 import com.github.ambry.replication.ReplicationManager;
@@ -266,7 +266,7 @@ public class AmbryServer {
               new BackupCheckerManager(replicationConfig, clusterMapConfig, storeConfig, storageManager,
                   storeKeyFactory, clusterMap, scheduler, nodeId, connectionPool, networkClientFactory, registry,
                   notificationSystem, storeKeyConverterFactory, serverConfig.serverMessageTransformer,
-                  clusterParticipants.get(0), skipPredicate);
+                  clusterParticipants.get(0), skipPredicate, cloudConfig, azureCloudConfig);
           replicationManager.start();
           logger.info("|snkt| Created BackupCheckerManager");
           break;

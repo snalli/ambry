@@ -111,6 +111,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
   protected static final String replicaTokenFileName = "replicaTokens";
   protected final Time time;
   protected LeaderBasedReplicationAdmin leaderBasedReplicationAdmin = null;
+  public static final String DR_Verifier_Keyword = "dr";
 
   public ReplicationEngine(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
       StoreConfig storeConfig, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
@@ -253,7 +254,7 @@ public abstract class ReplicationEngine implements ReplicationAPI {
       }
     }
     if (foundRemoteReplicaInfo == null && !replicaPath.startsWith(Cloud_Replica_Keyword) && !replicaPath.startsWith(
-        BackupCheckerThread.DR_Verifier_Keyword)) {
+        DR_Verifier_Keyword)) {
       replicationMetrics.unknownRemoteReplicaRequestCount.inc();
       logger.error("ReplicaMetaDataRequest from unknown Replica {}, with path {}", hostName, replicaPath);
     }
