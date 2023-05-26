@@ -90,8 +90,11 @@ public class AzureBlobDataAccessor {
     batchTimeout = Duration.ofMillis(cloudConfig.cloudBatchRequestTimeout);
 
     if (azureCloudConfig.azureStorageAccountInfo != null && !azureCloudConfig.azureStorageAccountInfo.isEmpty()) {
+      logger.info("|snkt| Using ShardedStorageClient, azureStorageAccountInfo = {}",
+          azureCloudConfig.azureStorageAccountInfo);
       storageClient = new ShardedStorageClient(cloudConfig, azureCloudConfig, azureMetrics, blobLayoutStrategy);
     } else {
+      logger.info("|snkt| Using azureStorageClientClass = {}", azureCloudConfig.azureStorageClientClass);
       storageClient =
           Utils.getObj(azureCloudConfig.azureStorageClientClass, cloudConfig, azureCloudConfig, azureMetrics,
               blobLayoutStrategy, null);

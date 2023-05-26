@@ -52,13 +52,19 @@ class AzureUtils {
         new ClientSecretCredentialBuilder().tenantId(azureCloudConfig.azureIdentityTenantId)
             .clientId(azureCloudConfig.azureIdentityClientId)
             .clientSecret(azureCloudConfig.azureIdentitySecret);
+    logger.info("|snkt| azureIdentityTenantId = {}", azureCloudConfig.azureIdentityTenantId);
+    logger.info("|snkt| azureIdentityClientId = {}", azureCloudConfig.azureIdentityClientId);
+    logger.info("|snkt| azureIdentitySecret = {}", azureCloudConfig.azureIdentitySecret);
+    logger.info("|snkt| azureStorageEndpoint = {}", azureCloudConfig.azureStorageEndpoint);
     if (!azureCloudConfig.azureIdentityProxyHost.isEmpty()) {
-      logger.info("Using proxy for ClientSecretCredential: {}:{}", azureCloudConfig.azureIdentityProxyHost,
+      logger.info("|snkt| Using proxy for ClientSecretCredential: {}:{}", azureCloudConfig.azureIdentityProxyHost,
           azureCloudConfig.azureIdentityProxyPort);
       ProxyOptions proxyOptions = new ProxyOptions(ProxyOptions.Type.HTTP,
           new InetSocketAddress(azureCloudConfig.azureIdentityProxyHost, azureCloudConfig.azureIdentityProxyPort));
       HttpClient httpClient = new NettyAsyncHttpClientBuilder().proxy(proxyOptions).build();
       builder.httpClient(httpClient);
+    } else {
+      logger.info("|snkt| NOT Using proxy for ClientSecretCredential");
     }
     return builder.build();
   }
