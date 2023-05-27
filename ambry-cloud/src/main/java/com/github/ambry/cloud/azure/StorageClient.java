@@ -311,6 +311,7 @@ public abstract class StorageClient implements AzureStorageClient {
    */
   private BlockBlobAsyncClient getBlockBlobAsyncClient(BlobId blobId, boolean autoCreateContainer) {
     AzureBlobLayoutStrategy.BlobLayout blobLayout = blobLayoutStrategy.getDataBlobLayout(blobId);
+    // logger.info("|snkt| containerName = {}, blobFilePath = {}", blobLayout.containerName, blobLayout.blobFilePath);
     return getBlockBlobAsyncClient(blobLayout.containerName, blobLayout.blobFilePath, autoCreateContainer);
   }
 

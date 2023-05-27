@@ -14,6 +14,7 @@
 package com.github.ambry.cloud;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.cloud.azure.AzureBlobDataAccessor;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.ReplicaSyncUpManager;
@@ -55,12 +56,14 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 
 /**
  * This class extends the replication logic encapsulated in ReplicaThread. Instead of apply updates
@@ -86,6 +89,7 @@ public class BackupCheckerThread extends ReplicaThread {
   public static final String REPLICA_STATUS_FILE = "replicaCheckStatus";
 
   public static final DateFormat DATE_FORMAT = new SimpleDateFormat("dd MMM yyyy HH:mm:ss:SSS");
+  protected AzureBlobDataAccessor azureBlobDataAccessor;
 
   protected HashMap<String, Set<String>> keysInPeerServerHashMap;
   protected HashMap<String, Set<String>> keysDeletedOrExpiredInPeerServerHashMap;
@@ -434,7 +438,28 @@ public class BackupCheckerThread extends ReplicaThread {
           } catch (StoreException e) {
             throw new RuntimeException(e);
           }
-          fileManager.appendToFileNoTime(keysInCosmosNotInPeerFile, getBlobInfoText(localBlob));
+          boolean foundInABS = false;
+          try {
+            BlobId blobId = new BlobId(localBlob.getStoreKey().getID(), clusterMap);
+            this.azureBlobDataAccessor = this.backupCheckerManager.getAzureBlobDataAccessor();
+            if (this.azureBlobDataAccessor != null) {
+              CompletableFuture<CloudBlobMetadata> completableFuture =
+                  this.azureBlobDataAccessor.getBlobMetadataAsync(blobId);
+              if (completableFuture != null) {
+                CloudBlobMetadata cloudBlobMetadata = completableFuture.join();
+                if (cloudBlobMetadata != null) {
+                  foundInABS = true;
+                }
+              } else {
+                logger.info("|snkt| Future is null for {}", blobId.getID());
+              }
+            } else {
+              logger.info("|snkt| azureBlobDataAccessor is null for {}", blobId.getID());
+            }
+          } catch (IOException e) {
+            throw new RuntimeException(e);
+          }
+          fileManager.appendToFileNoTime(keysInCosmosNotInPeerFile, getBlobInfoText(localBlob, foundInABS));
         }
         this.replicationStatusHashMap.put(replicaId, ReplicationStatus.Stats);
         break;
@@ -444,12 +469,13 @@ public class BackupCheckerThread extends ReplicaThread {
     }
   }
 
-  String getBlobInfoText(MessageInfo messageInfo) {
+  String getBlobInfoText(MessageInfo messageInfo, boolean foundInABS) {
     StoreKey storeKey = messageInfo.getStoreKey();
     try {
       BlobId blobId = new BlobId(storeKey.getID(), clusterMap);
-      String text = String.format("%s %s %s %s %s\n", storeKey.getID(), messageInfo.getOperationTimeMs(),
-          DATE_FORMAT.format(messageInfo.getOperationTimeMs()), blobId.getAccountId(), blobId.getContainerId());
+      String text = String.format("%s %s %s %s %s %s\n", storeKey.getID(), messageInfo.getOperationTimeMs(),
+          DATE_FORMAT.format(messageInfo.getOperationTimeMs()), blobId.getAccountId(), blobId.getContainerId(),
+          foundInABS);
       return text;
     } catch (IOException e) {
       throw new RuntimeException(e);

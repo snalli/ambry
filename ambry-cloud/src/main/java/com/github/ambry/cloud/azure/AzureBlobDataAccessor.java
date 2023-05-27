@@ -455,7 +455,7 @@ public class AzureBlobDataAccessor {
    * @param errorCode the {@link BlobErrorCode} to check.
    * @return {@code true} for a not-found error, otherwise {@code false}.
    */
-  private static boolean isNotFoundError(BlobErrorCode errorCode) {
+  public static boolean isNotFoundError(BlobErrorCode errorCode) {
     return (errorCode == BlobErrorCode.BLOB_NOT_FOUND || errorCode == BlobErrorCode.CONTAINER_NOT_FOUND);
   }
 }

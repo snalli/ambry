@@ -101,13 +101,16 @@ public class BackupCheckerManager extends ReplicationManager {
     }
     try {
       this.azureBlobDataAccessor = new AzureBlobDataAccessor(cloudConfig, azureCloudConfig,
-          new AzureBlobLayoutStrategy(clusterMapConfig.clusterMapClusterName, azureCloudConfig),
-          new AzureMetrics(metricRegistry));
+          new AzureBlobLayoutStrategy("ambry-video", azureCloudConfig), new AzureMetrics(metricRegistry));
       this.azureBlobDataAccessor.testConnectivity();
     } catch (ReflectiveOperationException e) {
       throw new RuntimeException(e);
     }
     logger.info("|snkt| Initialized BackupCheckerManager");
+  }
+
+  public AzureBlobDataAccessor getAzureBlobDataAccessor() {
+    return this.azureBlobDataAccessor;
   }
 
   public Set<String> getKeysForPartition(String partitionName) {
@@ -129,6 +132,7 @@ public class BackupCheckerManager extends ReplicationManager {
       MetricRegistry metricRegistry, boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler,
       Time time, ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
       ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin) {
+    logger.info("|snkt| BackupCheckerManager | Creating {}", threadName);
     return new BackupCheckerThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId,
         connectionPool, networkClient, replicationConfig, replicationMetrics, notification, storeKeyConverter,
         transformer, metricRegistry, replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager,
