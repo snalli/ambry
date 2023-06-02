@@ -86,19 +86,19 @@ public class RecoveryManager extends ReplicationEngine {
         Collections.emptyList(), connectionPool, metricRegistry, requestNotification, storeKeyConverterFactory,
         transformerClassName, clusterParticipant, storeManager, null, false);
     logger.info("|snkt| Creating RecoveryManager");
-    this.cosmosDataAccessor =
-        new CosmosDataAccessor(cloudConfig, azureCloudConfig, new VcrMetrics(metricRegistry),
-            new AzureMetrics(metricRegistry));
+    this.cosmosDataAccessor = new CosmosDataAccessor(cloudConfig, azureCloudConfig, new VcrMetrics(metricRegistry),
+        new AzureMetrics(metricRegistry));
     this.cosmosDataAccessor.testConnectivity();
     logger.info("|snkt| Created RecoveryManager");
 
     // vcrClusterSpectator is null when vcrClusterAgentsFactory is set to StaticVcrClusterAgentsFactory
     // Static VCR cluster-map
-    String staticVcrClustermapFile = "/export/content/lid/data/ambry-clustermap/ambry-clustermap/StaticVcrClustermap.json";
+    String staticVcrClustermapFile =
+        "/export/content/lid/data/ambry-clustermap/ambry-clustermap/StaticVcrClustermap.json";
     StaticVcrClustermap staticVcrClustermap;
     try {
-      staticVcrClustermap = new StaticVcrClustermap(
-          new JSONObject(readStringFromFile(staticVcrClustermapFile)), clusterMapConfig);
+      staticVcrClustermap =
+          new StaticVcrClustermap(new JSONObject(readStringFromFile(staticVcrClustermapFile)), clusterMapConfig);
       dummyDataNodeId = staticVcrClustermap.getCloudDataNodes().get(0);
     } catch (IOException e) {
       logger.error("Failed to read {} due to {}", staticVcrClustermapFile, e.toString());
@@ -130,10 +130,22 @@ public class RecoveryManager extends ReplicationEngine {
       MetricRegistry metricRegistry, boolean replicatingOverSsl, String datacenterName, ResponseHandler responseHandler,
       Time time, ReplicaSyncUpManager replicaSyncUpManager, Predicate<MessageInfo> skipPredicate,
       ReplicationManager.LeaderBasedReplicationAdmin leaderBasedReplicationAdmin) {
-    return new RecoveryThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId,
-        connectionPool, networkClient, replicationConfig, replicationMetrics, notification,
-        storeKeyConverter, transformer, metricRegistry, replicatingOverSsl, datacenterName,
-        responseHandler, time, replicaSyncUpManager, skipPredicate, leaderBasedReplicationAdmin, cosmosDataAccessor.getCosmosContainer());
+    if (clusterMapConfig.clusterMapEnableHttp2Replication) {
+      try {
+        RecoveryNetworkClientFactory recoveryNetworkClientFactory =
+            new RecoveryNetworkClientFactory(clusterMap, new FindTokenHelper(storeKeyFactory, replicationConfig),
+                this.storeManager, cosmosDataAccessor.getCosmosContainer());
+        networkClient = recoveryNetworkClientFactory.getNetworkClient();
+      } catch (ReflectiveOperationException e) {
+        throw new RuntimeException(e);
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+    }
+    return new RecoveryThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId, connectionPool,
+        networkClient, replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer,
+        metricRegistry, replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate,
+        leaderBasedReplicationAdmin, cosmosDataAccessor.getCosmosContainer());
   }
   @Override
   public void start() throws ReplicationException {

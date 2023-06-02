@@ -15,7 +15,10 @@ package com.github.ambry.cloud;
 
 import com.github.ambry.replication.FindToken;
 import com.github.ambry.replication.FindTokenType;
+import java.io.DataInputStream;
+import java.io.IOException;
 import java.lang.reflect.Field;
+import java.nio.ByteBuffer;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.LinkedHashMap;
@@ -171,7 +174,12 @@ public class RecoveryToken implements FindToken {
 
   @Override
   public byte[] toBytes() {
-    return new byte[0];
+    String tokenString = toString();
+    byte[] buf = new byte[tokenString.length()];
+    ByteBuffer bufWrap = ByteBuffer.wrap(buf);
+    bufWrap.putInt(tokenString.length());
+    bufWrap.put(tokenString.getBytes());
+    return buf;
   }
 
   @Override
@@ -187,5 +195,12 @@ public class RecoveryToken implements FindToken {
   @Override
   public short getVersion() {
     return 0;
+  }
+
+  static RecoveryToken fromBytes(DataInputStream stream) throws IOException {
+    int tokenLength = stream.readInt();
+    byte[] tokenBytes = new byte[tokenLength];
+    stream.read(tokenBytes, 0, tokenLength);
+    return new RecoveryToken(new JSONObject(new String(tokenBytes)));
   }
 }
