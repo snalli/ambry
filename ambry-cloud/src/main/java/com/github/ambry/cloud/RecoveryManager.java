@@ -14,6 +14,8 @@
 package com.github.ambry.cloud;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.cloud.azure.AzureBlobDataAccessor;
+import com.github.ambry.cloud.azure.AzureBlobLayoutStrategy;
 import com.github.ambry.cloud.azure.AzureCloudConfig;
 import com.github.ambry.cloud.azure.AzureMetrics;
 import com.github.ambry.cloud.azure.CosmosDataAccessor;
@@ -72,6 +74,7 @@ public class RecoveryManager extends ReplicationEngine {
   private final CosmosDataAccessor cosmosDataAccessor;
   private final Logger logger = LoggerFactory.getLogger(RecoveryManager.class);
   protected final BackupCheckerFileManager fileManager;
+  protected final AzureBlobDataAccessor azureBlobDataAccessor;
 
   protected DataNodeId dummyDataNodeId;
 
@@ -89,6 +92,16 @@ public class RecoveryManager extends ReplicationEngine {
     this.cosmosDataAccessor = new CosmosDataAccessor(cloudConfig, azureCloudConfig, new VcrMetrics(metricRegistry),
         new AzureMetrics(metricRegistry));
     this.cosmosDataAccessor.testConnectivity();
+
+    try {
+      this.azureBlobDataAccessor = new AzureBlobDataAccessor(cloudConfig, azureCloudConfig,
+          new AzureBlobLayoutStrategy("ambry-video", azureCloudConfig), new AzureMetrics(metricRegistry));
+      this.azureBlobDataAccessor.testConnectivity();
+      this.azureBlobDataAccessor.getStorageSyncClient().getBlobContainerClient("abc").listBlobs();
+    } catch (ReflectiveOperationException e) {
+      throw new RuntimeException(e);
+    }
+
     logger.info("|snkt| Created RecoveryManager");
 
     // vcrClusterSpectator is null when vcrClusterAgentsFactory is set to StaticVcrClusterAgentsFactory

@@ -17,6 +17,7 @@ import com.azure.core.credential.AccessToken;
 import com.azure.core.http.HttpClient;
 import com.azure.core.util.Configuration;
 import com.azure.storage.blob.BlobServiceAsyncClient;
+import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.BlobServiceClientBuilder;
 import com.azure.storage.blob.batch.BlobBatchAsyncClient;
 import com.azure.storage.blob.models.BlobStorageException;
@@ -94,7 +95,8 @@ public class ADAuthBasedStorageClient extends StorageClient {
       refreshToken();
     }
     return new BlobServiceClientBuilder().credential(request -> Mono.just(accessTokenRef.get()))
-        .endpoint(storageAccountInfo() != null ? storageAccountInfo().getStorageEndpoint() : azureCloudConfig.azureStorageEndpoint)
+        .endpoint(storageAccountInfo() != null ? storageAccountInfo().getStorageEndpoint()
+            : azureCloudConfig.azureStorageEndpoint)
         .httpClient(httpClient)
         .retryOptions(retryOptions)
         .configuration(configuration)
@@ -102,11 +104,19 @@ public class ADAuthBasedStorageClient extends StorageClient {
   }
 
   @Override
+  protected BlobServiceClient buildBlobServiceSyncClient(HttpClient httpClient, Configuration configuration,
+      RequestRetryOptions retryOptions, AzureCloudConfig azureCloudConfig)
+      throws MalformedURLException, InterruptedException, ExecutionException {
+    return null;
+  }
+
+  @Override
   protected void validateABSAuthConfigs(AzureCloudConfig azureCloudConfig) {
     if (storageAccountInfo() != null) {
       if (StringUtils.isNullOrEmpty(storageAccountInfo().getStorageScope())) {
-        throw new IllegalArgumentException(String.format("Storage account %s is missing the %s setting",
-            storageAccountInfo().getName(), AZURE_STORAGE_ACCOUNT_INFO_STORAGE_SCOPE));
+        throw new IllegalArgumentException(
+            String.format("Storage account %s is missing the %s setting", storageAccountInfo().getName(),
+                AZURE_STORAGE_ACCOUNT_INFO_STORAGE_SCOPE));
       }
       if (StringUtils.isNullOrEmpty(storageAccountInfo().getStorageEndpoint())) {
         throw new IllegalArgumentException(

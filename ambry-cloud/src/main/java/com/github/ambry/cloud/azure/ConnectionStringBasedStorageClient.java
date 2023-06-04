@@ -62,12 +62,23 @@ public class ConnectionStringBasedStorageClient extends StorageClient {
   protected BlobServiceAsyncClient buildBlobServiceAsyncClient(HttpClient httpClient, Configuration configuration,
       RequestRetryOptions retryOptions, AzureCloudConfig azureCloudConfig) {
     return new BlobServiceClientBuilder().connectionString(
-        storageAccountInfo() != null ? storageAccountInfo().getStorageConnectionString()
-            : azureCloudConfig.azureStorageConnectionString)
+            storageAccountInfo() != null ? storageAccountInfo().getStorageConnectionString()
+                : azureCloudConfig.azureStorageConnectionString)
         .httpClient(httpClient)
         .retryOptions(retryOptions)
         .configuration(configuration)
         .buildAsyncClient();
+  }
+
+  protected BlobServiceClient buildBlobServiceSyncClient(HttpClient httpClient, Configuration configuration,
+      RequestRetryOptions retryOptions, AzureCloudConfig azureCloudConfig) {
+    return new BlobServiceClientBuilder().connectionString(
+            storageAccountInfo() != null ? storageAccountInfo().getStorageConnectionString()
+                : azureCloudConfig.azureStorageConnectionString)
+        .httpClient(httpClient)
+        .retryOptions(retryOptions)
+        .configuration(configuration)
+        .buildClient();
   }
 
   /**

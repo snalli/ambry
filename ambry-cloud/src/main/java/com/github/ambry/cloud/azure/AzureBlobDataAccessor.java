@@ -101,6 +101,11 @@ public class AzureBlobDataAccessor {
     }
   }
 
+  void getContainerClient(String containerName) {
+    ConnectionStringBasedStorageClient connectionStringBasedStorageClient =
+        (ConnectionStringBasedStorageClient) storageClient;
+  }
+
   /**
    * Test constructor
    * @param blobServiceAsyncClient the {@link BlobServiceAsyncClient} to use.
@@ -139,6 +144,10 @@ public class AzureBlobDataAccessor {
    */
   public BlobServiceAsyncClient getStorageClient() {
     return storageClient.getStorageClient();
+  }
+
+  public BlobServiceClient getStorageSyncClient() {
+    return storageClient.getStorageSyncClient();
   }
 
   /** Visible for testing */

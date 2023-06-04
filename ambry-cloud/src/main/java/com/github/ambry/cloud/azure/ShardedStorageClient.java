@@ -16,6 +16,7 @@ package com.github.ambry.cloud.azure;
 import com.azure.core.http.rest.Response;
 import com.azure.core.util.Context;
 import com.azure.storage.blob.BlobServiceAsyncClient;
+import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.blob.batch.BlobBatchAsyncClient;
 import com.azure.storage.blob.models.AccessTier;
 import com.azure.storage.blob.models.BlobHttpHeaders;
@@ -120,6 +121,11 @@ public class ShardedStorageClient implements AzureStorageClient {
   @Override
   public BlobServiceAsyncClient getStorageClient() {
     return getMetadataAzureStorageClient().getStorageClient();
+  }
+
+  @Override
+  public BlobServiceClient getStorageSyncClient() {
+    return null;
   }
 
   /**

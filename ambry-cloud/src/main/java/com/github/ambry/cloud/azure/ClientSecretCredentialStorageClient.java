@@ -24,6 +24,8 @@ import com.azure.storage.blob.batch.BlobBatchClient;
 import com.azure.storage.blob.models.BlobStorageException;
 import com.azure.storage.common.policy.RequestRetryOptions;
 import com.github.ambry.config.CloudConfig;
+import java.net.MalformedURLException;
+import java.util.concurrent.ExecutionException;
 
 
 /**
@@ -71,11 +73,19 @@ public class ClientSecretCredentialStorageClient extends StorageClient {
   protected BlobServiceAsyncClient buildBlobServiceAsyncClient(HttpClient httpClient, Configuration configuration,
       RequestRetryOptions retryOptions, AzureCloudConfig azureCloudConfig) {
     return new BlobServiceClientBuilder().credential(AzureUtils.getClientSecretCredential(azureCloudConfig))
-        .endpoint(storageAccountInfo() != null ? storageAccountInfo().getStorageEndpoint() : azureCloudConfig.azureStorageEndpoint)
+        .endpoint(storageAccountInfo() != null ? storageAccountInfo().getStorageEndpoint()
+            : azureCloudConfig.azureStorageEndpoint)
         .httpClient(httpClient)
         .retryOptions(retryOptions)
         .configuration(configuration)
         .buildAsyncClient();
+  }
+
+  @Override
+  protected BlobServiceClient buildBlobServiceSyncClient(HttpClient httpClient, Configuration configuration,
+      RequestRetryOptions retryOptions, AzureCloudConfig azureCloudConfig)
+      throws MalformedURLException, InterruptedException, ExecutionException {
+    return null;
   }
 
   @Override
