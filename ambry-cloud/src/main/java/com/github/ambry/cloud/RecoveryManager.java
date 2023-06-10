@@ -97,11 +97,30 @@ public class RecoveryManager extends ReplicationEngine {
       this.azureBlobDataAccessor = new AzureBlobDataAccessor(cloudConfig, azureCloudConfig,
           new AzureBlobLayoutStrategy("ambry-video", azureCloudConfig), new AzureMetrics(metricRegistry));
       this.azureBlobDataAccessor.testConnectivity();
-      this.azureBlobDataAccessor.getStorageSyncClient().getBlobContainerClient("abc").listBlobs();
+      logger.info("|snkt| Created azureBlobDataAccessor");
     } catch (ReflectiveOperationException e) {
       throw new RuntimeException(e);
     }
 
+    // Lazily returns keys in alphabetical order
+    /**
+     ListBlobsOptions listBlobsOptions = new ListBlobsOptions();
+     BlobListDetails blobListDetails = new BlobListDetails();
+     blobListDetails.setRetrieveMetadata(true);
+     listBlobsOptions.setDetails(blobListDetails);
+     PagedIterable<BlobItem> blobItemPagedIterable = this.azureBlobDataAccessor.getStorageSyncClient()
+     .getBlobContainerClient("ambry-video-239-11")
+     .listBlobs(listBlobsOptions, null);
+     long numBlobItems = 0;
+     for (BlobItem blobItem : blobItemPagedIterable) {
+     logger.info("|snkt| blobItem = {}, blobMetadata = {}", blobItem.getName(), blobItem.getMetadata());
+     numBlobItems += 1;
+     if (numBlobItems > 10) {
+     break;
+     }
+     }
+     logger.info("|snkt| numBlobItems = {}", numBlobItems);
+     */
     logger.info("|snkt| Created RecoveryManager");
 
     // vcrClusterSpectator is null when vcrClusterAgentsFactory is set to StaticVcrClusterAgentsFactory
@@ -158,7 +177,7 @@ public class RecoveryManager extends ReplicationEngine {
     return new RecoveryThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId, connectionPool,
         networkClient, replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer,
         metricRegistry, replicatingOverSsl, datacenterName, responseHandler, time, replicaSyncUpManager, skipPredicate,
-        leaderBasedReplicationAdmin, cosmosDataAccessor.getCosmosContainer());
+        leaderBasedReplicationAdmin, cosmosDataAccessor.getCosmosContainer(), azureBlobDataAccessor);
   }
   @Override
   public void start() throws ReplicationException {

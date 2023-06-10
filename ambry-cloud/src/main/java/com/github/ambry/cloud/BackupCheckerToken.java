@@ -1,6 +1,8 @@
 package com.github.ambry.cloud;
 
 import java.lang.reflect.Field;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.LinkedHashMap;
 import org.json.JSONObject;
 import org.slf4j.Logger;
@@ -26,6 +28,8 @@ public class BackupCheckerToken {
   public static final String NUM_KEYS_IN_PEER_NOT_IN_COSMOS = "num_perm_keys_in_peer_not_in_cosmos";
   public static final String NUM_KEYS_IN_COSMOS_NOT_IN_PEER = "num_perm_keys_in_cosmos_not_in_peer";
   public static final String NUM_BYTES_IN_COSMOS_NOT_IN_PEER = "num_bytes_in_cosmos_not_in_peer";
+  public static final String REPLICATION_START_TIME = "replication_start_time";
+  public static final String REPLICATION_END_TIME = "replication_end_time";
 
   protected long partitionId = 0;
   protected String datanodeId = null;
@@ -42,6 +46,10 @@ public class BackupCheckerToken {
   protected long numKeysInCosmosNotInPeer;
   protected long numKeysInPeerDeletedOrExpired;
   protected long numBytesInCosmosNotInPeer;
+  protected String replicationStartTime;
+  protected String replicationEndTime;
+
+  public static final DateFormat DATE_FORMAT = new SimpleDateFormat("dd MMM yyyy HH:mm:ss:SSS");
 
   public BackupCheckerToken(long id, String hostname, String replicaPath, String ambryReplicationToken, long lagInBytes,
       long numBlobsReplicated, long numMissingDelete, long numMissingPut, long numMissingTtlUpdate,
@@ -54,6 +62,8 @@ public class BackupCheckerToken {
     this.numMissingDelete = numMissingDelete;
     this.numMissingTtlUpdate = numMissingTtlUpdate;
     this.numMissingUndelete = numMissingUndelete;
+    this.replicationStartTime = DATE_FORMAT.format(System.currentTimeMillis());
+    this.replicationEndTime = String.valueOf(0);
   }
 
   public BackupCheckerToken(JSONObject jsonObject) {
@@ -72,6 +82,8 @@ public class BackupCheckerToken {
     this.numKeysInCosmos = jsonObject.getLong(NUM_KEYS_IN_COSMOS);
     this.numKeysInCosmosNotInPeer = jsonObject.getLong(NUM_KEYS_IN_COSMOS_NOT_IN_PEER);
     this.numBytesInCosmosNotInPeer = jsonObject.getLong(NUM_BYTES_IN_COSMOS_NOT_IN_PEER);
+    this.replicationStartTime = jsonObject.getString(REPLICATION_START_TIME);
+    this.replicationEndTime = jsonObject.getString(REPLICATION_END_TIME);
   }
 
   public long incrementNumMissingDelete(long inc) {
@@ -134,6 +146,11 @@ public class BackupCheckerToken {
     return this.numKeysInPeerDeletedOrExpired;
   }
 
+  public String setReplicationEndTime(String time) {
+    this.replicationEndTime = time;
+    return this.replicationEndTime;
+  }
+
   public String toString() {
     JSONObject jsonObject = new JSONObject();
     try {
@@ -160,6 +177,8 @@ public class BackupCheckerToken {
     jsonObject.put(NUM_KEYS_IN_COSMOS, this.numKeysInCosmos);
     jsonObject.put(NUM_KEYS_IN_COSMOS_NOT_IN_PEER, this.numKeysInCosmosNotInPeer);
     jsonObject.put(NUM_BYTES_IN_COSMOS_NOT_IN_PEER, this.numBytesInCosmosNotInPeer);
+    jsonObject.put(REPLICATION_START_TIME, this.replicationStartTime);
+    jsonObject.put(REPLICATION_END_TIME, this.replicationEndTime);
     return jsonObject.toString(4);
   }
 }

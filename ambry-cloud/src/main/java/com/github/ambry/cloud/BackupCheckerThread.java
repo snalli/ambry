@@ -385,6 +385,7 @@ public class BackupCheckerThread extends ReplicaThread {
 
       case Completed:
         currBackupCheckerToken = getOrCreateToken(remoteReplicaInfo);
+        currBackupCheckerToken.setReplicationEndTime(DATE_FORMAT.format(System.currentTimeMillis()));
         HashMap<StoreKey, IndexEntry> indexEntriesInCosmos = this.backupCheckerManager.getIndexEntriesForPartition(
             String.valueOf(remoteReplicaInfo.getReplicaId().getPartitionId().getId()));
         Set<String> keysInCosmos = new HashSet<>();
