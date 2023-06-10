@@ -61,6 +61,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
 import org.json.JSONObject;
@@ -385,8 +386,17 @@ public class RecoveryThread extends ReplicaThread {
           try {
             byteBuffer = ByteBuffer.allocate((int) messageInfo.getSize()); // is this the size of the blob ?
             byteBufferOutputStream = new ByteBufferOutputStream(byteBuffer);
-            this.azureBlobDataAccessor.downloadBlobAsync(blobId, byteBufferOutputStream).join();
-          } catch (CompletionException e) {
+            Boolean aBoolean = this.azureBlobDataAccessor.downloadBlobAsync(blobId, byteBufferOutputStream).get();
+            if (aBoolean) {
+              String info =
+                  String.format("|snkt| Downloaded %s, size = %s, pos = %s, lim = %s, cap = %s", blobId.getID(),
+                      messageInfo.getSize(), byteBuffer.position(), byteBuffer.limit(), byteBuffer.capacity());
+              logger.trace(info);
+              byteBuffer.flip();
+            } else {
+              logger.info("|snkt| Not downloaded " + blobId.getID());
+            }
+          } catch (CompletionException | ExecutionException | InterruptedException e) {
             Exception ex = Utils.extractFutureExceptionCause(e);
             throw new RuntimeException("|snkt| Error downloading blob " + blobId, ex);
           }
