@@ -168,11 +168,14 @@ public class RecoveryManager extends ReplicationEngine {
             new RecoveryNetworkClientFactory(clusterMap, new FindTokenHelper(storeKeyFactory, replicationConfig),
                 this.storeManager, cosmosDataAccessor.getCosmosContainer());
         networkClient = recoveryNetworkClientFactory.getNetworkClient();
+        logger.info("|snkt| getReplicaThread | Using RecoveryNetworkClientFactory");
       } catch (ReflectiveOperationException e) {
         throw new RuntimeException(e);
       } catch (IOException e) {
         throw new RuntimeException(e);
       }
+    } else {
+      logger.info("|snkt| getReplicaThread | NOT using RecoveryNetworkClientFactory");
     }
     return new RecoveryThread(threadName, tokenHelper, clusterMap, correlationIdGenerator, dataNodeId, connectionPool,
         networkClient, replicationConfig, replicationMetrics, notification, storeKeyConverter, transformer,

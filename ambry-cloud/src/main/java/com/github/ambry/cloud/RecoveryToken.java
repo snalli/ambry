@@ -174,6 +174,7 @@ public class RecoveryToken implements FindToken {
 
   @Override
   public byte[] toBytes() {
+    logger.info("|snkt| Serializing RecoveryToken");
     String tokenString = toString();
     byte[] buf = new byte[tokenString.length() + Integer.BYTES];
     ByteBuffer bufWrap = ByteBuffer.wrap(buf);

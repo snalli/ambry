@@ -111,6 +111,7 @@ public class RecoveryThread extends ReplicaThread {
     this.cosmosContainer = cosmosContainer;
     this.clusterMap = clusterMap;
     this.azureBlobDataAccessor = azureBlobDataAccessor;
+    this.networkClient = networkClient;
     logger.info("|snkt| Created RecoveryThread {}", threadName);
   }
 

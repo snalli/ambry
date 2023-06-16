@@ -102,7 +102,7 @@ public class ReplicaThread implements Runnable {
   protected final AtomicInteger correlationIdGenerator;
   protected final DataNodeId dataNodeId;
   private final ConnectionPool connectionPool;
-  private final NetworkClient networkClient;
+  protected NetworkClient networkClient;
   private final ReplicationConfig replicationConfig;
   private final ReplicationMetrics replicationMetrics;
   private final String threadName;

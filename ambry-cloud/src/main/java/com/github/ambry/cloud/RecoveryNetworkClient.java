@@ -78,6 +78,7 @@ public class RecoveryNetworkClient implements NetworkClient {
     this.findTokenHelper = findTokenHelper;
     this.storeManager = storeManager;
     this.cosmosContainer = cosmosContainer;
+    logger.info("|snkt| getReplicaThread | Created RecoveryNetworkClient");
   }
 
   @Override
