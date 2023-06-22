@@ -30,11 +30,12 @@ import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.config.ReplicationConfig;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.messageformat.MessageFormatWriteSet;
-import com.github.ambry.messageformat.MessageSievingInputStream;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.protocol.GetResponse;
+import com.github.ambry.protocol.PartitionResponseInfo;
 import com.github.ambry.protocol.ReplicaMetadataResponse;
 import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
 import com.github.ambry.replication.FindTokenHelper;
@@ -46,6 +47,7 @@ import com.github.ambry.server.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
 import com.github.ambry.store.Store;
 import com.github.ambry.store.StoreException;
+import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyConverter;
 import com.github.ambry.store.Transformer;
 import com.github.ambry.utils.ByteBufferInputStream;
@@ -112,6 +114,7 @@ public class RecoveryThread extends ReplicaThread {
     this.clusterMap = clusterMap;
     this.azureBlobDataAccessor = azureBlobDataAccessor;
     this.networkClient = networkClient;
+    this.threadName = threadName;
     logger.info("|snkt| Created RecoveryThread {}", threadName);
   }
 
@@ -455,28 +458,94 @@ public class RecoveryThread extends ReplicaThread {
   protected long getRemoteReplicaLag(Store store, long totalBytesRead) {
     return store.getSizeInBytes() - totalBytesRead;
   }
+
   /**
    * Applies PUT to local store and creates the blob locally
-   * @param validMessageDetectionInputStream Stream of valid blob IDs
+   * @param messageInfoList Stream of valid blob IDs
    * @param remoteReplicaInfo Info about remote replica from which we are replicating
    * @throws StoreException
    * @throws IOException
    */
-  @Override
-  protected void applyPut(MessageSievingInputStream validMessageDetectionInputStream,
-      RemoteReplicaInfo remoteReplicaInfo) throws StoreException, IOException {
-    List<MessageInfo> messageInfoList = validMessageDetectionInputStream.getValidMessageInfoList();
+  protected void applyPut(List<MessageInfo> messageInfoList, RemoteReplicaInfo remoteReplicaInfo)
+      throws StoreException, IOException {
     if (messageInfoList.size() == 0) {
       logger.debug("MessageInfoList is of size 0 as all messages are invalidated, deprecated, deleted or expired.");
     } else {
-      MessageFormatWriteSet writeSet =
-          new MessageFormatWriteSet(infiniteByteStream, messageInfoList, false);
+      MessageFormatWriteSet writeSet = new MessageFormatWriteSet(infiniteByteStream, messageInfoList, false);
       remoteReplicaInfo.getLocalStore().put(writeSet);
     }
   }
+
   @Override
   protected MessageFormatFlags getMessageFormatFlagsForReplication() {
-    return MessageFormatFlags.BlobInfo;
+    return MessageFormatFlags.All;
+  }
+
+  protected void handleGetResponse(GetResponse getResponse, List<RemoteReplicaInfo> replicasToReplicatePerNode,
+      List<ExchangeMetadataResponse> exchangeMetadataResponseList, DataNodeId remoteNode,
+      boolean remoteColoGetRequestForStandby) throws IOException {
+    int partitionResponseInfoIndex = 0;
+    for (int i = 0; i < exchangeMetadataResponseList.size(); i++) {
+      ExchangeMetadataResponse exchangeMetadataResponse = exchangeMetadataResponseList.get(i);
+      RemoteReplicaInfo remoteReplicaInfo = replicasToReplicatePerNode.get(i);
+      // TODO: if remoteReplicaInfo.getLocalStore() is closed, write will fail
+      if (exchangeMetadataResponse.serverErrorCode == ServerErrorCode.No_Error) {
+        if (exchangeMetadataResponse.getMissingStoreMessages().size() > 0) {
+          PartitionResponseInfo partitionResponseInfo =
+              getResponse.getPartitionResponseInfoList().get(partitionResponseInfoIndex);
+          partitionResponseInfoIndex++;
+          if (!partitionResponseInfo.getPartition()
+              .toPathString()
+              .equals(remoteReplicaInfo.getReplicaId().getPartitionId().toPathString())) {
+            throw new IllegalStateException(
+                "The partition id from partitionResponseInfo " + partitionResponseInfo.getPartition()
+                    + " and from remoteReplicaInfo " + remoteReplicaInfo.getReplicaId().getPartitionId()
+                    + " are not the same");
+          }
+          if (partitionResponseInfo.getErrorCode() == ServerErrorCode.No_Error) {
+            List<MessageInfo> messageInfoList = partitionResponseInfo.getMessageInfoList();
+            try {
+              logger.trace("Remote node: {} Thread name: {} Remote replica: {} Messages to fix: {} "
+                      + "Partition: {} Local mount path: {}", remoteNode, threadName, remoteReplicaInfo.getReplicaId(),
+                  exchangeMetadataResponse.getMissingStoreKeys(), remoteReplicaInfo.getReplicaId().getPartitionId(),
+                  remoteReplicaInfo.getLocalReplicaId().getMountPath());
+
+              applyPut(messageInfoList, remoteReplicaInfo);
+
+              for (MessageInfo messageInfo : messageInfoList) {
+                logger.trace("Remote node: {} Thread name: {} Remote replica: {} Message replicated: {} Partition: {} "
+                        + "Local mount path: {} Message size: {}", remoteNode, threadName, remoteReplicaInfo.getReplicaId(),
+                    messageInfo.getStoreKey(), remoteReplicaInfo.getReplicaId().getPartitionId(),
+                    remoteReplicaInfo.getLocalReplicaId().getMountPath(), messageInfo.getSize());
+
+                if (messageInfo.isTtlUpdated()) {
+                  applyTtlUpdate(messageInfo, remoteReplicaInfo);
+                }
+                StoreKey key = messageInfo.getStoreKey();
+              }
+
+              advanceToken(remoteReplicaInfo, exchangeMetadataResponse);
+
+              logger.trace("Remote node: {} Thread name: {} Remote replica: {} Token after speaking to remote node: {}",
+                  remoteNode, threadName, remoteReplicaInfo.getReplicaId(), exchangeMetadataResponse.remoteToken);
+            } catch (StoreException e) {
+
+            }
+          } else if (partitionResponseInfo.getErrorCode() == ServerErrorCode.Blob_Deleted) {
+            logger.info("One of the blobs to GET is deleted: Remote node: {} Thread name: {} Remote replica: {}",
+                remoteNode, threadName, remoteReplicaInfo.getReplicaId());
+          } else if (partitionResponseInfo.getErrorCode() == ServerErrorCode.Blob_Authorization_Failure) {
+            logger.error(
+                "One of the blobs authorization failed: Remote node: {} Thread name: {} Remote replica: {} Keys are: {}",
+                remoteNode, threadName, remoteReplicaInfo.getReplicaId(),
+                exchangeMetadataResponse.getMissingStoreKeys());
+          } else {
+            logger.error("Remote node: {} Thread name: {} Remote replica: {} Server error: {}", remoteNode, threadName,
+                remoteReplicaInfo.getReplicaId(), partitionResponseInfo.getErrorCode());
+          }
+        }
+      }
+    }
   }
 
   /**

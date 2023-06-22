@@ -105,7 +105,7 @@ public class ReplicaThread implements Runnable {
   protected NetworkClient networkClient;
   private final ReplicationConfig replicationConfig;
   private final ReplicationMetrics replicationMetrics;
-  private final String threadName;
+  protected String threadName;
   private final NotificationSystem notification;
   private static final Logger logger = LoggerFactory.getLogger(ReplicaThread.class);
   private final StoreKeyConverter storeKeyConverter;
@@ -1233,7 +1233,7 @@ public class ReplicaThread implements Runnable {
    *                                       non-leader replica pairs during leader-based replication.
    * @throws IOException
    */
-  private void handleGetResponse(GetResponse getResponse, List<RemoteReplicaInfo> replicasToReplicatePerNode,
+  protected void handleGetResponse(GetResponse getResponse, List<RemoteReplicaInfo> replicasToReplicatePerNode,
       List<ExchangeMetadataResponse> exchangeMetadataResponseList, DataNodeId remoteNode,
       boolean remoteColoGetRequestForStandby) throws IOException {
     int partitionResponseInfoIndex = 0;
@@ -1819,7 +1819,7 @@ public class ReplicaThread implements Runnable {
      * Get the keys corresponding to the missing messages in the local store
      * @return store keys missing in the local store
      */
-    synchronized Set<StoreKey> getMissingStoreKeys() {
+    public synchronized Set<StoreKey> getMissingStoreKeys() {
       return missingStoreMessages == null ? Collections.emptySet()
           : missingStoreMessages.stream().map(MessageInfo::getStoreKey).collect(Collectors.toSet());
     }
