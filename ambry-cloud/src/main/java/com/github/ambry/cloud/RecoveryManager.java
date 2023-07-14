@@ -166,7 +166,7 @@ public class RecoveryManager extends ReplicationEngine {
       try {
         RecoveryNetworkClientFactory recoveryNetworkClientFactory =
             new RecoveryNetworkClientFactory(clusterMap, new FindTokenHelper(storeKeyFactory, replicationConfig),
-                this.storeManager, cosmosDataAccessor.getCosmosContainer());
+                this.storeManager, cosmosDataAccessor.getCosmosContainer(), azureBlobDataAccessor);
         networkClient = recoveryNetworkClientFactory.getNetworkClient();
         logger.info("|snkt| getReplicaThread | Using RecoveryNetworkClientFactory");
       } catch (ReflectiveOperationException e) {

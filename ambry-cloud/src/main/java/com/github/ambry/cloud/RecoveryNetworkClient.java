@@ -13,11 +13,17 @@
  */
 package com.github.ambry.cloud;
 
+import com.azure.core.http.rest.PagedResponse;
 import com.azure.cosmos.ConsistencyLevel;
 import com.azure.cosmos.CosmosContainer;
 import com.azure.cosmos.models.CosmosQueryRequestOptions;
 import com.azure.cosmos.models.FeedResponse;
 import com.azure.cosmos.models.PartitionKey;
+import com.azure.storage.blob.BlobContainerClient;
+import com.azure.storage.blob.models.BlobItem;
+import com.azure.storage.blob.models.BlobListDetails;
+import com.azure.storage.blob.models.ListBlobsOptions;
+import com.github.ambry.cloud.azure.AzureBlobDataAccessor;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
@@ -71,13 +77,17 @@ public class RecoveryNetworkClient implements NetworkClient {
   private final StoreManager storeManager;
   private final ConcurrentHashMap<StoreKey, MessageInfo> messageInfoCache = new ConcurrentHashMap<>();
   protected final CosmosContainer cosmosContainer;
+  protected final AzureBlobDataAccessor azureBlobDataAccessor;
+  protected boolean useComosDb;
 
   public RecoveryNetworkClient(ClusterMap clustermap, FindTokenHelper findTokenHelper, StoreManager storeManager,
-      CosmosContainer cosmosContainer) {
+      CosmosContainer cosmosContainer, AzureBlobDataAccessor azureBlobDataAccessor) {
     this.clustermap = clustermap;
     this.findTokenHelper = findTokenHelper;
     this.storeManager = storeManager;
     this.cosmosContainer = cosmosContainer;
+    this.azureBlobDataAccessor = azureBlobDataAccessor;
+    this.useComosDb = false;
   }
 
   @Override
@@ -123,7 +133,8 @@ public class RecoveryNetworkClient implements NetworkClient {
    * @param request The {@link ReplicaMetadataRequest} to handle
    * @return A {@link ReplicaMetadataResponse}.
    */
-  private ReplicaMetadataResponse handleReplicaMetadataRequest(ReplicaMetadataRequest request) {
+  private ReplicaMetadataResponse getReplicaMetadataFromCosmosDB(ReplicaMetadataRequest request) {
+
     final String COSMOS_QUERY = "select * from c where c.partitionId = \"%s\"";
     List<ReplicaMetadataResponseInfo> replicaMetadataResponseList =
         new ArrayList<>(request.getReplicaMetadataRequestInfoList().size());
@@ -215,6 +226,65 @@ public class RecoveryNetworkClient implements NetworkClient {
     }
     return new ReplicaMetadataResponse(request.getCorrelationId(), request.getClientId(), ServerErrorCode.No_Error,
         replicaMetadataResponseList, replicaMetadataRequestVersion);
+  }
+
+  /**
+   * Handle ReplicaMetataRequest and return a response.
+   * @param request The {@link ReplicaMetadataRequest} to handle
+   * @return A {@link ReplicaMetadataResponse}.
+   */
+  private ReplicaMetadataResponse getReplicaMetadataFromBlobStorage(ReplicaMetadataRequest request) {
+    List<ReplicaMetadataResponseInfo> replicaMetadataResponseList =
+        new ArrayList<>(request.getReplicaMetadataRequestInfoList().size());
+    short replicaMetadataRequestVersion = ReplicaMetadataResponse.getCompatibleResponseVersion(request.getVersionId());
+
+    BlobContainerClient blobContainerClient =
+        azureBlobDataAccessor.getStorageSyncClient().getBlobContainerClient("ambry-video-239-11");
+
+    BlobListDetails blobListDetails = new BlobListDetails();
+    blobListDetails.setRetrieveMetadata(true);
+
+    ListBlobsOptions listBlobsOptions = new ListBlobsOptions();
+    listBlobsOptions.setDetails(blobListDetails);
+
+    String continuationToken = null;
+    long numPages = 0, numBlobItems = 0;
+    long startTime = System.currentTimeMillis();
+    while (true) {
+      Iterable<PagedResponse<BlobItem>> blobPages =
+          blobContainerClient.listBlobs(listBlobsOptions, continuationToken, null).iterableByPage();
+      for (PagedResponse<BlobItem> page : blobPages) {
+        continuationToken = page.getContinuationToken();
+        numPages += 1;
+        for (BlobItem blobItem : page.getElements()) {
+          numBlobItems += 1;
+        }
+        logger.info("|snkt| numPages = {}, numBlobs = {}", numPages, numBlobItems);
+      }
+      if (continuationToken == null) {
+        break;
+      }
+    }
+    long resultFetchTime = System.currentTimeMillis() - startTime;
+    logger.info("|snkt| numPages = {}, numBlobs = {}, resultFetchTime = {} ms", numPages, numBlobItems,
+        resultFetchTime);
+    return new ReplicaMetadataResponse(request.getCorrelationId(), request.getClientId(), ServerErrorCode.No_Error,
+        replicaMetadataResponseList, replicaMetadataRequestVersion);
+  }
+
+  /**
+   * Handle ReplicaMetataRequest and return a response.
+   * @param request The {@link ReplicaMetadataRequest} to handle
+   * @return A {@link ReplicaMetadataResponse}.
+   */
+  private ReplicaMetadataResponse handleReplicaMetadataRequest(ReplicaMetadataRequest request) {
+    if (useComosDb) {
+      // use cosmos db for metadata-request
+      return getReplicaMetadataFromCosmosDB(request);
+    } else {
+      // use azure blobs for metadata-request
+      return getReplicaMetadataFromBlobStorage(request);
+    }
   }
 
   /**

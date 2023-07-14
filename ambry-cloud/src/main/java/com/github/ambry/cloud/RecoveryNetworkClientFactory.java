@@ -14,6 +14,7 @@
 package com.github.ambry.cloud;
 
 import com.azure.cosmos.CosmosContainer;
+import com.github.ambry.cloud.azure.AzureBlobDataAccessor;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.network.NetworkClient;
 import com.github.ambry.network.NetworkClientFactory;
@@ -30,24 +31,28 @@ public class RecoveryNetworkClientFactory implements NetworkClientFactory {
   private final FindTokenHelper findTokenHelper;
   private final StoreManager storeManager;
   private final CosmosContainer cosmosContainer;
+  private final AzureBlobDataAccessor azureBlobDataAccessor;
 
   /**
    * Constructor to create the factory
-   * @param clusterMap The {@link ClusterMap} object.
-   * @param findTokenHelper The {@link FindTokenHelper} object.
-   * @param storeManager The {@link StoreManager} object.
-   * @param cosmosContainer The {@link CosmosContainer} object.
+   *
+   * @param clusterMap            The {@link ClusterMap} object.
+   * @param findTokenHelper       The {@link FindTokenHelper} object.
+   * @param storeManager          The {@link StoreManager} object.
+   * @param cosmosContainer       The {@link CosmosContainer} object.
+   * @param azureBlobDataAccessor
    */
   public RecoveryNetworkClientFactory(ClusterMap clusterMap, FindTokenHelper findTokenHelper, StoreManager storeManager,
-      CosmosContainer cosmosContainer) {
+      CosmosContainer cosmosContainer, AzureBlobDataAccessor azureBlobDataAccessor) {
     this.clustermap = clusterMap;
     this.findTokenHelper = findTokenHelper;
     this.storeManager = storeManager;
     this.cosmosContainer = cosmosContainer;
+    this.azureBlobDataAccessor = azureBlobDataAccessor;
   }
 
   @Override
   public NetworkClient getNetworkClient() throws IOException {
-    return new RecoveryNetworkClient(clustermap, findTokenHelper, storeManager, cosmosContainer);
+    return new RecoveryNetworkClient(clustermap, findTokenHelper, storeManager, cosmosContainer, azureBlobDataAccessor);
   }
 }
